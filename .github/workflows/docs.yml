@@ -18,6 +18,8 @@ jobs:
   build:
     name: Build DocC
     runs-on: macos-26
+    env:
+      PRINTABLEVIEW_BUILD_DOCS: "1"
     steps:
       - uses: actions/checkout@v5
 
