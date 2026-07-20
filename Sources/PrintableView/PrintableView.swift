@@ -23,7 +23,7 @@
 #if os(macOS)
     import AppKit
     import PDFKit
-#else
+#elseif !os(tvOS)
     import UIKit
 #endif
 import CoreGraphics
@@ -166,7 +166,7 @@ private let usLetter = CGSize(width: 612, height: 792)
         operation.jobTitle = jobTitle
         operation.run()
     }
-#else
+#elseif !os(tvOS)
     /// Prints `pdfData` through the standard iOS/iPadOS print interaction controller. PDF
     /// data is a valid printing item, which UIKit paginates page-per-page on its own.
     @MainActor
@@ -180,6 +180,11 @@ private let usLetter = CGSize(width: 612, height: 792)
         controller.printingItem = pdfData
         controller.present(animated: true)
     }
+#else
+    /// tvOS has no system print UI. Keep the shared API available so clients can
+    /// compile their document models while their platform policy hides Print.
+    @MainActor
+    private func presentPrintPanel(pdfData _: Data, pageSize _: CGSize, jobTitle _: String) {}
 #endif
 
 // MARK: - Print layout primitives
@@ -218,7 +223,9 @@ public struct PrintCode: View {
     public var body: some View {
         Text(code)
             .font(.system(.footnote, design: .monospaced))
-            .textSelection(.disabled)
+            #if !os(tvOS)
+                .textSelection(.disabled)
+            #endif
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
