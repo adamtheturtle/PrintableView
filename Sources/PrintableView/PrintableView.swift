@@ -2,87 +2,125 @@
 //  PrintableView.swift
 //  PrintableView
 //
-//  Print a SwiftUI view to paper (or Save-as-PDF) on macOS and iPadOS. SwiftUI has no
-//  print pipeline of its own, so the content is rendered to a paginated *vector* PDF with
-//  `ImageRenderer`'s `render(rasterizationScale:renderer:)` closure drawn into a
-//  `CGContext` PDF context, and that PDF is handed to the platform print machinery
-//  (`PDFDocument.printOperation` on macOS, `UIPrintInteractionController` on iOS).
-//
-//  Why a vector PDF rather than a rasterized bitmap: text and shapes are emitted as vector
-//  drawing operations, so they print crisp at the printer's true resolution, stay
-//  selectable/searchable in a saved PDF, produce small files, and avoid the large-bitmap
-//  memory spike of rasterizing a long document at 2x. (Bitmap *images* embedded in the
-//  content remain raster, as they must.)
-//
-//  Why render through `ImageRenderer` at all rather than printing a hosted view directly:
-//  handing an `NSHostingView` to `NSPrintOperation` yields blank pages, because a
-//  layer-backed SwiftUI view's content isn't emitted through the `draw(_:)` path the print
-//  system captures. Rendering into a `CGContext` sidesteps that entirely.
-//
 
 #if os(macOS)
     import AppKit
     import PDFKit
-#elseif !os(tvOS)
+#elseif os(iOS)
     import UIKit
 #endif
 import CoreGraphics
+import CoreText
+import Foundation
 import SwiftUI
 
-/// Renders `content` to a paginated vector PDF and presents the platform's standard print
-/// panel (from which the user can print or Save-as-PDF).
-///
-/// The content is laid out at the page's printable width, pinned to a light color scheme on
-/// a white background — paper is white, and adaptive colors would otherwise print as
-/// whatever the current appearance happens to be (e.g. white-on-white in dark mode). Content
-/// taller than one page is split across pages by vertical position; a single line of content
-/// sitting on a page boundary can therefore be divided across the break.
-///
-/// - Note: Like all `ImageRenderer` output, views backed by native platform frameworks
-///   (`MapKit` maps, `WKWebView`, `AVPlayer`, Metal/SceneKit) render as blank rectangles.
-///
-/// - Parameters:
-///   - content: The SwiftUI view to print.
-///   - jobTitle: The print job's title, shown in the print panel and print queue.
-///   - pageSize: The paper size in points. Defaults to the platform's default paper size.
-///   - margins: The uniform page margin in points. Defaults to 36 (half an inch).
-@MainActor
-public func printDocument(
-    _ content: some View,
-    jobTitle: String,
-    pageSize: CGSize? = nil,
-    margins: CGFloat = 36
-) {
-    let paperSize = pageSize ?? defaultPaperSize()
-    guard let pdfData = makeDocumentPDFData(content, pageSize: paperSize, margins: margins) else {
-        return
+/// An error encountered while laying out or encoding a printable document.
+public enum PrintDocumentError: Error, Equatable, LocalizedError {
+    /// The page size, margins, or footer do not describe a usable page.
+    case invalidPageGeometry(String)
+    /// Core Graphics could not create a PDF destination.
+    case couldNotCreatePDFContext
+
+    public var errorDescription: String? {
+        switch self {
+        case let .invalidPageGeometry(reason):
+            "Invalid print page geometry: \(reason)"
+        case .couldNotCreatePDFContext:
+            "The PDF drawing context could not be created."
+        }
     }
-    presentPrintPanel(pdfData: pdfData, pageSize: paperSize, jobTitle: jobTitle)
 }
 
-/// Renders `content` to a multi-page vector PDF and returns the encoded document data, or
-/// `nil` if a PDF context could not be created.
+/// A single-line text footer drawn within a bounded area on every PDF page.
 ///
-/// Split out from ``printDocument(_:jobTitle:pageSize:margins:)`` so the pagination is
-/// testable without presenting UI. The content is constrained to the printable width
-/// (`pageSize.width` minus both margins) and its natural height is sliced into page-height
-/// bands.
+/// Footer text is clipped to the page's printable width and the configured height. The
+/// formatter receives one-based page numbers after pagination is complete.
+public struct PrintFooter {
+    /// The height reserved below document content, in points.
+    public var height: CGFloat
+
+    let text: (_ page: Int, _ pageCount: Int) -> String
+
+    /// Creates a page footer.
+    ///
+    /// - Parameters:
+    ///   - height: Space reserved for the footer, in points.
+    ///   - text: A formatter receiving the current one-based page number and total pages.
+    public init(
+        height: CGFloat = 18,
+        text: @escaping (_ page: Int, _ pageCount: Int) -> String
+    ) {
+        self.height = height
+        self.text = text
+    }
+
+    /// Creates a footer containing a source attribution and page numbering.
+    ///
+    /// The result has the form `source • Page 2 of 5`. The drawing bounds safely clip a
+    /// source that is too long to fit; callers do not need to truncate it themselves.
+    public static func attribution(source: String, height: CGFloat = 18) -> PrintFooter {
+        PrintFooter(height: height) { page, pageCount in
+            "\(source) • Page \(page) of \(pageCount)"
+        }
+    }
+
+    /// Creates a source-attribution footer from a URL's absolute string.
+    public static func attribution(sourceURL: URL, height: CGFloat = 18) -> PrintFooter {
+        attribution(source: sourceURL.absoluteString, height: height)
+    }
+}
+
+/// Layout and presentation options for a printable SwiftUI document.
+public struct PrintConfiguration {
+    /// The paper size in points. Pass `nil` to use the platform default.
+    public var pageSize: CGSize?
+    /// The inset from each paper edge, in points.
+    public var margins: EdgeInsets
+    /// An optional single-line footer reserved beneath the document content.
+    public var footer: PrintFooter?
+    /// The title shown by the system print panel and print queue.
+    public var jobTitle: String
+    /// The appearance used to resolve adaptive colors in the rendered view.
+    public var colorScheme: ColorScheme
+    /// The background drawn behind the document content.
+    public var background: Color
+
+    /// Creates print configuration values.
+    public init(
+        pageSize: CGSize? = nil,
+        margins: EdgeInsets = EdgeInsets(top: 36, leading: 36, bottom: 36, trailing: 36),
+        footer: PrintFooter? = nil,
+        jobTitle: String = "Document",
+        colorScheme: ColorScheme = .light,
+        background: Color = .white
+    ) {
+        self.pageSize = pageSize
+        self.margins = margins
+        self.footer = footer
+        self.jobTitle = jobTitle
+        self.colorScheme = colorScheme
+        self.background = background
+    }
+}
+
+/// Renders a SwiftUI view to deterministic, paginated vector PDF data.
+///
+/// Content is laid out at the printable width and divided into vertical page-height bands.
+/// Views backed by native platform frameworks, such as web views, maps, video, or Metal,
+/// may render as blank rectangles due to `ImageRenderer` limitations.
 @MainActor
-func makeDocumentPDFData(
+public func renderPDF(
     _ content: some View,
-    pageSize: CGSize,
-    margins: CGFloat
-) -> Data? {
-    let contentWidth = pageSize.width - margins * 2
-    let printableHeight = pageSize.height - margins * 2
+    configuration: PrintConfiguration = PrintConfiguration()
+) throws -> Data {
+    let pageSize = configuration.pageSize ?? defaultPaperSize()
+    let layout = try validatedLayout(configuration: configuration, pageSize: pageSize)
 
     let document = content
-        .frame(width: contentWidth, alignment: .leading)
-        .environment(\.colorScheme, .light)
-        .background(Color.white)
-
+        .frame(width: layout.contentWidth, alignment: .leading)
+        .environment(\.colorScheme, configuration.colorScheme)
+        .background(configuration.background)
     let renderer = ImageRenderer(content: document)
-    // Point-for-point vector output; the printer, not us, decides device resolution.
     renderer.scale = 1
 
     let pdfData = NSMutableData()
@@ -91,42 +129,175 @@ func makeDocumentPDFData(
         let consumer = CGDataConsumer(data: pdfData as CFMutableData),
         let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)
     else {
-        return nil
+        throw PrintDocumentError.couldNotCreatePDFContext
     }
 
     renderer.render { contentSize, renderInContext in
-        // `contentSize` is the full laid-out content (contentWidth x total height). The
-        // render closure draws the whole thing upright into `context`; we shift and clip it
-        // per page to emit one printable band at a time.
-        //
-        // PDF pages use a bottom-left origin. The content, as drawn, spans y in
-        // [0, contentSize.height] with its top edge at the high end. For page `i` we want the
-        // band starting `i * printableHeight` down from the content's top to land at the top
-        // of the printable box, so we translate the whole content up by that offset and clip
-        // to the page's printable rectangle.
-        let pageCount = max(1, Int((contentSize.height / printableHeight).rounded(.up)))
-        for page in 0 ..< pageCount {
+        let pageCount = max(1, Int((contentSize.height / layout.contentHeight).rounded(.up)))
+        for pageIndex in 0 ..< pageCount {
             context.beginPDFPage(nil)
+
             context.saveGState()
-            // Clip in page coordinates (before the translate below applies to drawing).
-            context.clip(to: CGRect(x: margins, y: margins, width: contentWidth, height: printableHeight))
-            let yOffset = pageSize.height - margins - contentSize.height + CGFloat(page) * printableHeight
-            context.translateBy(x: margins, y: yOffset)
+            context.clip(to: layout.contentBounds)
+            let yOffset = pageSize.height - configuration.margins.top - contentSize.height
+                + CGFloat(pageIndex) * layout.contentHeight
+            context.translateBy(x: configuration.margins.leading, y: yOffset)
             renderInContext(context)
             context.restoreGState()
+
+            if let footer = configuration.footer {
+                drawFooter(
+                    footer.text(pageIndex + 1, pageCount),
+                    context: context,
+                    bounds: layout.footerBounds
+                )
+            }
             context.endPDFPage()
         }
     }
     context.closePDF()
-
     return pdfData as Data
 }
 
-/// The platform's default paper size in points.
+/// Builds and renders a SwiftUI view to paginated PDF data.
+@MainActor
+public func renderPDF<Content: View>(
+    configuration: PrintConfiguration = PrintConfiguration(),
+    @ViewBuilder content: () -> Content
+) throws -> Data {
+    try renderPDF(content(), configuration: configuration)
+}
+
+/// Renders a configured SwiftUI document and presents the platform print UI.
+@MainActor
+public func printDocument<Content: View>(
+    configuration: PrintConfiguration,
+    @ViewBuilder content: () -> Content
+) throws {
+    let data = try renderPDF(configuration: configuration, content: content)
+    presentPrintPanel(
+        pdfData: data,
+        pageSize: configuration.pageSize ?? defaultPaperSize(),
+        jobTitle: configuration.jobTitle
+    )
+}
+
+/// Renders `content` and presents the platform's standard print panel.
+///
+/// This source-compatible convenience API uses a uniform margin. Use
+/// ``printDocument(configuration:content:)`` for footers, appearance, and asymmetric margins.
+@MainActor
+public func printDocument(
+    _ content: some View,
+    jobTitle: String,
+    pageSize: CGSize? = nil,
+    margins: CGFloat = 36
+) {
+    let configuration = PrintConfiguration(
+        pageSize: pageSize,
+        margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
+        jobTitle: jobTitle
+    )
+    guard let data = try? renderPDF(content, configuration: configuration) else { return }
+    presentPrintPanel(
+        pdfData: data,
+        pageSize: pageSize ?? defaultPaperSize(),
+        jobTitle: jobTitle
+    )
+}
+
+/// The original package-internal PDF entry point, retained for source and test compatibility.
+@MainActor
+func makeDocumentPDFData(
+    _ content: some View,
+    pageSize: CGSize,
+    margins: CGFloat
+) -> Data? {
+    try? renderPDF(
+        content,
+        configuration: PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins)
+        )
+    )
+}
+
+private struct ValidatedLayout {
+    let contentWidth: CGFloat
+    let contentHeight: CGFloat
+    let contentBounds: CGRect
+    let footerBounds: CGRect
+}
+
+private func validatedLayout(
+    configuration: PrintConfiguration,
+    pageSize: CGSize
+) throws -> ValidatedLayout {
+    let margins = configuration.margins
+    let footerHeight = configuration.footer?.height ?? 0
+    let values = [pageSize.width, pageSize.height, margins.top, margins.leading,
+                  margins.bottom, margins.trailing, footerHeight]
+    guard values.allSatisfy(\.isFinite) else {
+        throw PrintDocumentError.invalidPageGeometry("all dimensions must be finite")
+    }
+    guard pageSize.width > 0, pageSize.height > 0 else {
+        throw PrintDocumentError.invalidPageGeometry("page width and height must be greater than zero")
+    }
+    guard margins.top >= 0, margins.leading >= 0, margins.bottom >= 0, margins.trailing >= 0 else {
+        throw PrintDocumentError.invalidPageGeometry("margins cannot be negative")
+    }
+    guard footerHeight >= 0 else {
+        throw PrintDocumentError.invalidPageGeometry("footer height cannot be negative")
+    }
+
+    let contentWidth = pageSize.width - margins.leading - margins.trailing
+    let contentHeight = pageSize.height - margins.top - margins.bottom - footerHeight
+    guard contentWidth > 0 else {
+        throw PrintDocumentError.invalidPageGeometry("horizontal margins leave no printable width")
+    }
+    guard contentHeight > 0 else {
+        throw PrintDocumentError.invalidPageGeometry("margins and footer leave no printable height")
+    }
+
+    return ValidatedLayout(
+        contentWidth: contentWidth,
+        contentHeight: contentHeight,
+        contentBounds: CGRect(
+            x: margins.leading,
+            y: margins.bottom + footerHeight,
+            width: contentWidth,
+            height: contentHeight
+        ),
+        footerBounds: CGRect(
+            x: margins.leading,
+            y: margins.bottom,
+            width: contentWidth,
+            height: footerHeight
+        )
+    )
+}
+
+private func drawFooter(_ text: String, context: CGContext, bounds: CGRect) {
+    guard bounds.width > 0, bounds.height > 0 else { return }
+    let fontSize = min(8, max(1, bounds.height - 4))
+    let attributes: [NSAttributedString.Key: Any] = [
+        NSAttributedString.Key(kCTFontAttributeName as String):
+            CTFontCreateWithName("Helvetica" as CFString, fontSize, nil),
+        NSAttributedString.Key(kCTForegroundColorAttributeName as String):
+            CGColor(gray: 0.35, alpha: 1)
+    ]
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+    context.saveGState()
+    context.clip(to: bounds)
+    context.textMatrix = .identity
+    context.textPosition = CGPoint(x: bounds.minX, y: bounds.minY + max(1, (bounds.height - fontSize) / 2))
+    CTLineDraw(line, context)
+    context.restoreGState()
+}
+
 @MainActor
 private func defaultPaperSize() -> CGSize {
     #if os(macOS)
-        // Respects the system/printer default (e.g. A4 vs. US Letter by region).
         let size = NSPrintInfo.shared.paperSize
         return size.width > 0 && size.height > 0 ? size : usLetter
     #else
@@ -134,17 +305,12 @@ private func defaultPaperSize() -> CGSize {
     #endif
 }
 
-/// US Letter at 72 points per inch (8.5" x 11").
 private let usLetter = CGSize(width: 612, height: 792)
 
 #if os(macOS)
-    /// Prints `pdfData` through the standard macOS print panel. The PDF already carries
-    /// full-page-sized pages with margins baked in, so it prints 1:1 with no extra scaling
-    /// or margins.
     @MainActor
     private func presentPrintPanel(pdfData: Data, pageSize: CGSize, jobTitle: String) {
         guard let document = PDFDocument(data: pdfData) else { return }
-
         let info = NSPrintInfo()
         info.paperSize = pageSize
         info.topMargin = 0
@@ -153,44 +319,27 @@ private let usLetter = CGSize(width: 612, height: 792)
         info.rightMargin = 0
         info.horizontalPagination = .fit
         info.verticalPagination = .fit
-
-        guard
-            let operation = document.printOperation(
-                for: info,
-                scalingMode: .pageScaleNone,
-                autoRotate: false
-            )
-        else {
-            return
-        }
+        guard let operation = document.printOperation(for: info, scalingMode: .pageScaleNone,
+                                                       autoRotate: false) else { return }
         operation.jobTitle = jobTitle
         operation.run()
     }
-#elseif !os(tvOS)
-    /// Prints `pdfData` through the standard iOS/iPadOS print interaction controller. PDF
-    /// data is a valid printing item, which UIKit paginates page-per-page on its own.
+#elseif os(iOS)
     @MainActor
     private func presentPrintPanel(pdfData: Data, pageSize _: CGSize, jobTitle: String) {
         let info = UIPrintInfo(dictionary: nil)
         info.jobName = jobTitle
         info.outputType = .general
-
         let controller = UIPrintInteractionController.shared
         controller.printInfo = info
         controller.printingItem = pdfData
         controller.present(animated: true)
     }
-#else
-    /// tvOS has no system print UI. Keep the shared API available so clients can
-    /// compile their document models while their platform policy hides Print.
-    @MainActor
-    private func presentPrintPanel(pdfData _: Data, pageSize _: CGSize, jobTitle _: String) {}
 #endif
 
 // MARK: - Print layout primitives
 
-/// A titled block in a printed document — a small heading over its content, with space below
-/// so sections don't run together across a page.
+/// A titled block in a printed document.
 public struct PrintSection<Content: View>: View {
     private let title: String
     @ViewBuilder private let content: () -> Content
@@ -202,17 +351,14 @@ public struct PrintSection<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
+            Text(title).font(.headline)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// Code rendered for paper: plain wrapping monospaced text rather than an on-screen
-/// syntax-highlighted, horizontally-scrolling view (which wouldn't paginate). Wrapping keeps
-/// long lines on the page instead of clipping them.
+/// Monospaced, wrapping text suitable for printed source code.
 public struct PrintCode: View {
     private let code: String
 
@@ -223,9 +369,7 @@ public struct PrintCode: View {
     public var body: some View {
         Text(code)
             .font(.system(.footnote, design: .monospaced))
-            #if !os(tvOS)
-                .textSelection(.disabled)
-            #endif
+            .textSelection(.disabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }

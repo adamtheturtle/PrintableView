@@ -28,11 +28,42 @@ printDocument(
 )
 ```
 
+Generate data without presenting print UI using ``renderPDF(configuration:content:)``:
+
+```swift
+let data = try renderPDF(configuration: PrintConfiguration(jobTitle: "Notes")) {
+    NotesView()
+}
+```
+
+For source attribution and page numbering, configure a ``PrintFooter``. Oversized text is
+clipped to its reserved single-line bounds.
+
+```swift
+let configuration = PrintConfiguration(
+    footer: .attribution(sourceURL: sourceURL),
+    jobTitle: "Notes"
+)
+
+try printDocument(configuration: configuration) {
+    NotesView()
+}
+```
+
 ## Topics
 
 ### Printing
 
 - ``printDocument(_:jobTitle:pageSize:margins:)``
+- ``printDocument(configuration:content:)``
+- ``renderPDF(_:configuration:)``
+- ``renderPDF(configuration:content:)``
+
+### Configuration
+
+- ``PrintConfiguration``
+- ``PrintFooter``
+- ``PrintDocumentError``
 
 ### Layout primitives
 

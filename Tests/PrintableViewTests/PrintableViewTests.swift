@@ -9,6 +9,7 @@
 //
 
 import CoreGraphics
+import PDFKit
 import SwiftUI
 import Testing
 @testable import PrintableView
@@ -41,6 +42,10 @@ struct PrintableViewTests {
         return pdfPage.getBoxRect(.mediaBox).size
     }
 
+    private func pageText(_ data: Data, page: Int) -> String? {
+        PDFDocument(data: data)?.page(at: page - 1)?.string
+    }
+
     @Test func `short content produces a single page`() {
         let data = makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
         #expect(data != nil)
@@ -60,6 +65,84 @@ struct PrintableViewTests {
         let data = makeDocumentPDFData(tall, pageSize: letter, margins: margins)
         #expect(data != nil)
         #expect(pageCount(data!) == 3)
+    }
+
+    @Test func `public renderer creates one page`() throws {
+        let data = try renderPDF(
+            Text("Public API"),
+            configuration: PrintConfiguration(pageSize: letter)
+        )
+        #expect(pageCount(data) == 1)
+    }
+
+    @Test func `public renderer creates multiple pages`() throws {
+        let data = try renderPDF(
+            Color.black.frame(height: 2000),
+            configuration: PrintConfiguration(pageSize: letter)
+        )
+        #expect(pageCount(data) == 3)
+    }
+
+    @Test func `footer receives current and total page counts`() throws {
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: PrintFooter { page, pageCount in
+                "Source example.test • Page \(page) of \(pageCount)"
+            }
+        )
+        let data = try renderPDF(Color.black.frame(height: 1500), configuration: configuration)
+
+        #expect(pageCount(data) == 3)
+        #expect(pageText(data, page: 1)?.contains("Page 1 of 3") == true)
+        #expect(pageText(data, page: 2)?.contains("Page 2 of 3") == true)
+        #expect(pageText(data, page: 3)?.contains("Page 3 of 3") == true)
+    }
+
+    @Test func `attribution footer includes source and page count`() throws {
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: .attribution(source: "https://example.com/resource")
+        )
+        let data = try renderPDF(Text("Document"), configuration: configuration)
+        let text = pageText(data, page: 1)
+
+        #expect(text?.contains("https://example.com/resource") == true)
+        #expect(text?.contains("Page 1 of 1") == true)
+    }
+
+    @Test func `long footer remains bounded to its page`() throws {
+        let longSource = "https://example.com/" + String(repeating: "very-long-segment/", count: 200)
+        let configuration = PrintConfiguration(
+            pageSize: CGSize(width: 240, height: 300),
+            footer: .attribution(source: longSource)
+        )
+        let data = try renderPDF(Text("Document"), configuration: configuration)
+
+        #expect(pageCount(data) == 1)
+        #expect(mediaBoxSize(data, page: 1) == configuration.pageSize)
+        #expect(pageText(data, page: 1)?.contains("https://example.com/") == true)
+    }
+
+    @Test func `invalid geometry throws a meaningful error`() {
+        let configuration = PrintConfiguration(
+            pageSize: CGSize(width: 100, height: 100),
+            margins: EdgeInsets(top: 40, leading: 50, bottom: 40, trailing: 50),
+            footer: PrintFooter(height: 30) { _, _ in "Footer" }
+        )
+
+        #expect(throws: PrintDocumentError.self) {
+            try renderPDF(Text("No room"), configuration: configuration)
+        }
+    }
+
+    @Test func `negative dimensions are rejected`() {
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            margins: EdgeInsets(top: -1, leading: 36, bottom: 36, trailing: 36)
+        )
+        #expect(throws: PrintDocumentError.self) {
+            try renderPDF(Text("No room"), configuration: configuration)
+        }
     }
 
     @Test func `larger margins yield more pages for the same content`() {

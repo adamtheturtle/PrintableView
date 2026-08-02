@@ -18,6 +18,57 @@ Add the `PrintableView` product to your target dependencies.
 - `PrintableView`: Render SwiftUI content to a paginated vector PDF and present the
   platform print panel.
 
+## Basic printing
+
+```swift
+import PrintableView
+
+printDocument(
+    PrintSection(title: "Interview Notes") {
+        PrintCode(code: transcript)
+    },
+    jobTitle: "Interview Notes"
+)
+```
+
+This source-compatible convenience presents the native print UI on macOS and iOS/iPadOS.
+
+## Rendering PDF data
+
+PDF generation is separate from print-panel presentation, so it can be saved, shared, or
+tested without displaying UI:
+
+```swift
+let configuration = PrintConfiguration(
+    pageSize: CGSize(width: 612, height: 792),
+    jobTitle: "Interview Notes"
+)
+
+let pdfData = try renderPDF(configuration: configuration) {
+    InterviewNotesView()
+}
+```
+
+Invalid page sizes, margins, and footer heights throw `PrintDocumentError` rather than
+silently producing an empty document.
+
+## Adding a source-attribution footer
+
+```swift
+let configuration = PrintConfiguration(
+    footer: .attribution(sourceURL: sourceURL),
+    jobTitle: "Reference"
+)
+
+try printDocument(configuration: configuration) {
+    ReferenceView()
+}
+```
+
+The convenience footer draws `https://example.com/resource • Page 2 of 5`. For other text,
+use `PrintFooter { page, pageCount in ... }`. Footer output is constrained and clipped to a
+single bounded area on every page.
+
 ## Requirements
 
 - Swift 6.2+
