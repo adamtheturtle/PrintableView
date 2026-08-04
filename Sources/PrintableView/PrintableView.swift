@@ -30,6 +30,14 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
     case pageCountLimitExceeded(pageCount: Int, maximum: Int)
     /// The encoded PDF grew beyond the configured byte ceiling.
     case pdfSizeLimitExceeded(maximumBytes: Int)
+    /// The rendered bytes could not be opened as a platform PDF document.
+    case couldNotOpenRenderedPDF
+    /// The platform could not create an operation for the rendered document.
+    case couldNotCreatePrintOperation
+    /// The platform refused to present its print UI.
+    case couldNotPresentPrintPanel
+    /// Printing failed after the user accepted the platform print UI.
+    case printOperationFailed(String?)
 
     public var errorDescription: String? {
         switch self {
@@ -47,8 +55,28 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
             "The document requires \(pageCount) pages, exceeding the configured maximum of \(maximum)."
         case let .pdfSizeLimitExceeded(maximumBytes):
             "The encoded PDF exceeds the configured maximum of \(maximumBytes) bytes."
+        case .couldNotOpenRenderedPDF:
+            "The rendered PDF could not be opened for printing."
+        case .couldNotCreatePrintOperation:
+            "A print operation could not be created for the rendered PDF."
+        case .couldNotPresentPrintPanel:
+            "The platform print panel could not be presented."
+        case let .printOperationFailed(reason):
+            if let reason, !reason.isEmpty {
+                "The print operation failed: \(reason)"
+            } else {
+                "The print operation failed."
+            }
         }
     }
+}
+
+/// The user-visible outcome after the platform print UI was presented.
+public enum PrintPresentationOutcome: Equatable, Sendable {
+    /// The platform reported that printing completed.
+    case completed
+    /// The user cancelled from the platform print UI.
+    case cancelled
 }
 
 /// A single-line text footer drawn within a bounded area on every PDF page.
@@ -317,13 +345,80 @@ public func renderPDF<Content: View>(
 public func printDocument<Content: View>(
     configuration: PrintConfiguration,
     @ViewBuilder content: () -> Content
-) throws {
-    let data = try renderPDF(configuration: configuration, content: content)
-    presentPrintPanel(
-        pdfData: data,
-        pageSize: configuration.pageSize ?? defaultPaperSize(),
-        jobTitle: configuration.jobTitle
+) async throws -> PrintPresentationOutcome {
+    try await printDocument(
+        configuration: configuration,
+        content: content,
+        presenter: livePrintPanelPresenter
     )
+}
+
+enum PrintPresentationResult: Equatable {
+    case completed
+    case cancelled
+    case invalidPDF
+    case operationUnavailable
+    case presentationRejected
+    case failed(String?)
+}
+
+typealias PrintPanelPresenter = @MainActor (
+    _ pdfData: Data,
+    _ pageSize: CGSize,
+    _ jobTitle: String
+) async -> PrintPresentationResult
+
+@MainActor
+func printDocument<Content: View>(
+    configuration: PrintConfiguration,
+    @ViewBuilder content: () -> Content,
+    presenter: PrintPanelPresenter
+) async throws -> PrintPresentationOutcome {
+    let data = try renderPDF(configuration: configuration, content: content)
+    let result = await presenter(
+        data,
+        configuration.pageSize ?? defaultPaperSize(),
+        configuration.jobTitle
+    )
+    return try presentationOutcome(for: result)
+}
+
+private func presentationOutcome(
+    for result: PrintPresentationResult
+) throws -> PrintPresentationOutcome {
+    switch result {
+    case .completed:
+        .completed
+    case .cancelled:
+        .cancelled
+    case .invalidPDF:
+        throw PrintDocumentError.couldNotOpenRenderedPDF
+    case .operationUnavailable:
+        throw PrintDocumentError.couldNotCreatePrintOperation
+    case .presentationRejected:
+        throw PrintDocumentError.couldNotPresentPrintPanel
+    case let .failed(reason):
+        throw PrintDocumentError.printOperationFailed(reason)
+    }
+}
+
+/// Renders `content`, presents the platform print UI, and reports its final outcome.
+@MainActor
+public func printDocument(
+    _ content: some View,
+    jobTitle: String,
+    pageSize: CGSize? = nil,
+    margins: CGFloat = 36
+) async throws -> PrintPresentationOutcome {
+    try await printDocument(
+        configuration: PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
+            jobTitle: jobTitle
+        )
+    ) {
+        content
+    }
 }
 
 /// Renders `content` and presents the platform's standard print panel.
@@ -348,14 +443,14 @@ public func printDocument(
     )
 }
 
-/// Renders `content`, presents the platform print panel, and reports rendering failures.
+/// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
 @MainActor
 public func printDocument(
     _ content: some View,
     jobTitle: String,
     pageSize: CGSize? = nil,
     margins: CGFloat = 36,
-    onError: (PrintDocumentError) -> Void
+    onError: @escaping (PrintDocumentError) -> Void
 ) {
     let configuration = PrintConfiguration(
         pageSize: pageSize,
@@ -364,11 +459,20 @@ public func printDocument(
     )
     do {
         let data = try renderPDF(content, configuration: configuration)
-        presentPrintPanel(
-            pdfData: data,
-            pageSize: pageSize ?? defaultPaperSize(),
-            jobTitle: jobTitle
-        )
+        Task { @MainActor in
+            let result = await livePrintPanelPresenter(
+                pdfData: data,
+                pageSize: pageSize ?? defaultPaperSize(),
+                jobTitle: jobTitle
+            )
+            do {
+                _ = try presentationOutcome(for: result)
+            } catch let error as PrintDocumentError {
+                onError(error)
+            } catch {
+                assertionFailure("print presentation threw an undocumented error: \(error)")
+            }
+        }
     } catch let error as PrintDocumentError {
         onError(error)
     } catch {
@@ -499,8 +603,12 @@ private let usLetter = CGSize(width: 612, height: 792)
 
 #if os(macOS)
     @MainActor
-    private func presentPrintPanel(pdfData: Data, pageSize: CGSize, jobTitle: String) {
-        guard let document = PDFDocument(data: pdfData) else { return }
+    private func livePrintPanelPresenter(
+        pdfData: Data,
+        pageSize: CGSize,
+        jobTitle: String
+    ) async -> PrintPresentationResult {
+        guard let document = PDFDocument(data: pdfData) else { return .invalidPDF }
         let info = NSPrintInfo()
         info.paperSize = pageSize
         info.topMargin = 0
@@ -510,20 +618,69 @@ private let usLetter = CGSize(width: 612, height: 792)
         info.horizontalPagination = .fit
         info.verticalPagination = .fit
         guard let operation = document.printOperation(for: info, scalingMode: .pageScaleNone,
-                                                       autoRotate: false) else { return }
+                                                       autoRotate: false) else {
+            return .operationUnavailable
+        }
         operation.jobTitle = jobTitle
-        operation.run()
+        switch operation.printPanel.runModal(with: info) {
+        case NSApplication.ModalResponse.OK.rawValue:
+            break
+        case NSApplication.ModalResponse.cancel.rawValue:
+            return .cancelled
+        default:
+            return .presentationRejected
+        }
+        operation.showsPrintPanel = false
+        return operation.run() ? .completed : .failed(nil)
     }
 #elseif os(iOS)
     @MainActor
-    private func presentPrintPanel(pdfData: Data, pageSize _: CGSize, jobTitle: String) {
+    private final class PrintCompletionGate {
+        private var continuation: CheckedContinuation<PrintPresentationResult, Never>?
+        private var finished = false
+
+        func install(_ continuation: CheckedContinuation<PrintPresentationResult, Never>) {
+            self.continuation = continuation
+        }
+
+        func finish(with result: PrintPresentationResult) {
+            guard !finished else { return }
+            finished = true
+            continuation?.resume(returning: result)
+            continuation = nil
+        }
+    }
+
+    @MainActor
+    private func livePrintPanelPresenter(
+        pdfData: Data,
+        pageSize _: CGSize,
+        jobTitle: String
+    ) async -> PrintPresentationResult {
         let info = UIPrintInfo(dictionary: nil)
         info.jobName = jobTitle
         info.outputType = .general
         let controller = UIPrintInteractionController.shared
         controller.printInfo = info
         controller.printingItem = pdfData
-        controller.present(animated: true)
+        let gate = PrintCompletionGate()
+        return await withCheckedContinuation { continuation in
+            gate.install(continuation)
+            let didPresent = controller.present(animated: true) { _, completed, error in
+                let result: PrintPresentationResult
+                if let error {
+                    result = .failed(error.localizedDescription)
+                } else {
+                    result = completed ? .completed : .cancelled
+                }
+                Task { @MainActor in
+                    gate.finish(with: result)
+                }
+            }
+            if !didPresent {
+                gate.finish(with: .presentationRejected)
+            }
+        }
     }
 #endif
 

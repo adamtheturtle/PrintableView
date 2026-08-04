@@ -23,7 +23,7 @@ Add the `PrintableView` product to your target dependencies.
 ```swift
 import PrintableView
 
-printDocument(
+let outcome = try await printDocument(
     PrintSection(title: "Interview Notes") {
         PrintCode(code: transcript)
     },
@@ -31,7 +31,8 @@ printDocument(
 )
 ```
 
-This source-compatible convenience presents the native print UI on macOS and iOS/iPadOS.
+The throwing API reports whether printing completed or the user cancelled. It throws a
+`PrintDocumentError` if PDF handoff, print-panel presentation, or printing fails.
 
 ## Rendering PDF data
 
@@ -60,7 +61,7 @@ let configuration = PrintConfiguration(
     jobTitle: "Reference"
 )
 
-try printDocument(configuration: configuration) {
+let outcome = try await printDocument(configuration: configuration) {
     ReferenceView()
 }
 ```

@@ -20,7 +20,7 @@ optionally build document-shaped content from the ``PrintSection`` and ``PrintCo
 primitives.
 
 ```swift
-printDocument(
+let outcome = try await printDocument(
     PrintSection(title: "Interview Notes") {
         PrintCode(code: transcript)
     },
@@ -45,8 +45,12 @@ let configuration = PrintConfiguration(
     jobTitle: "Notes"
 )
 
-try printDocument(configuration: configuration) {
+let outcome = try await printDocument(configuration: configuration) {
     NotesView()
+}
+
+if outcome == .cancelled {
+    // The user dismissed the platform print UI.
 }
 ```
 
@@ -64,6 +68,7 @@ try printDocument(configuration: configuration) {
 - ``PrintConfiguration``
 - ``PrintFooter``
 - ``PrintDocumentError``
+- ``PrintPresentationOutcome``
 
 ### Layout primitives
 
