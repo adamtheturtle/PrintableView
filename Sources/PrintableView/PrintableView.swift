@@ -24,6 +24,12 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
     case couldNotCreatePDFContext
     /// SwiftUI did not provide any drawing callback for the rendered view.
     case renderProducedNoPages
+    /// A configured resource ceiling cannot be enforced because it is not positive.
+    case invalidResourceLimit(String)
+    /// Rendering would require more pages than the configured ceiling.
+    case pageCountLimitExceeded(pageCount: Int, maximum: Int)
+    /// The encoded PDF grew beyond the configured byte ceiling.
+    case pdfSizeLimitExceeded(maximumBytes: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +41,12 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
             "The PDF drawing context could not be created."
         case .renderProducedNoPages:
             "The view renderer did not produce any PDF pages."
+        case let .invalidResourceLimit(reason):
+            "Invalid print resource limit: \(reason)"
+        case let .pageCountLimitExceeded(pageCount, maximum):
+            "The document requires \(pageCount) pages, exceeding the configured maximum of \(maximum)."
+        case let .pdfSizeLimitExceeded(maximumBytes):
+            "The encoded PDF exceeds the configured maximum of \(maximumBytes) bytes."
         }
     }
 }
@@ -122,6 +134,10 @@ public struct PrintConfiguration {
     public var colorScheme: ColorScheme
     /// The background drawn behind the document content.
     public var background: Color
+    /// The greatest number of pages a single render may emit.
+    public var maximumPageCount: Int
+    /// The greatest encoded PDF size a single render may return, in bytes.
+    public var maximumPDFBytes: Int
 
     /// Creates print configuration values.
     public init(
@@ -130,7 +146,9 @@ public struct PrintConfiguration {
         footer: PrintFooter? = nil,
         jobTitle: String = "Document",
         colorScheme: ColorScheme = .light,
-        background: Color = .white
+        background: Color = .white,
+        maximumPageCount: Int = 1_000,
+        maximumPDFBytes: Int = 100 * 1_024 * 1_024
     ) {
         self.pageSize = pageSize
         self.margins = margins
@@ -138,6 +156,8 @@ public struct PrintConfiguration {
         self.jobTitle = jobTitle
         self.colorScheme = colorScheme
         self.background = background
+        self.maximumPageCount = maximumPageCount
+        self.maximumPDFBytes = maximumPDFBytes
     }
 }
 
@@ -179,6 +199,12 @@ func renderPDFData(
     layout: ValidatedLayout,
     performRender: (_ body: @escaping PDFRenderBody) -> Void
 ) throws -> Data {
+    guard configuration.maximumPageCount > 0 else {
+        throw PrintDocumentError.invalidResourceLimit("maximumPageCount must be greater than zero")
+    }
+    guard configuration.maximumPDFBytes > 0 else {
+        throw PrintDocumentError.invalidResourceLimit("maximumPDFBytes must be greater than zero")
+    }
 
     let pdfData = NSMutableData()
     var mediaBox = CGRect(origin: .zero, size: pageSize)
@@ -205,6 +231,13 @@ func renderPDFData(
             assertionFailure("validatedPageCount threw an undocumented error: \(error)")
             return
         }
+        guard pageCount <= configuration.maximumPageCount else {
+            renderingError = .pageCountLimitExceeded(
+                pageCount: pageCount,
+                maximum: configuration.maximumPageCount
+            )
+            return
+        }
         for pageIndex in 0 ..< pageCount {
             context.beginPDFPage(nil)
 
@@ -225,11 +258,18 @@ func renderPDFData(
             }
             context.endPDFPage()
             emittedPageCount += 1
+            if pdfData.length > configuration.maximumPDFBytes {
+                renderingError = .pdfSizeLimitExceeded(maximumBytes: configuration.maximumPDFBytes)
+                break
+            }
         }
     }
     context.closePDF()
     if let renderingError {
         throw renderingError
+    }
+    guard pdfData.length <= configuration.maximumPDFBytes else {
+        throw PrintDocumentError.pdfSizeLimitExceeded(maximumBytes: configuration.maximumPDFBytes)
     }
     guard emittedPageCount > 0 else {
         throw PrintDocumentError.renderProducedNoPages
