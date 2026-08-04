@@ -278,6 +278,17 @@ struct PrintableViewTests {
         }
     }
 
+    @Test func `the rounded Int upper boundary is rejected before conversion`() {
+        #expect(throws: PrintDocumentError.invalidContentGeometry(
+            "height exceeds the supported page-count range"
+        )) {
+            try validatedPageCount(
+                contentSize: CGSize(width: 100, height: CGFloat(Int.max)),
+                contentHeight: 1
+            )
+        }
+    }
+
     @Test func `larger margins yield more pages for the same content`() {
         let tall = Color.black.frame(height: 2000)
         let thin = makeDocumentPDFData(tall, pageSize: letter, margins: 36)

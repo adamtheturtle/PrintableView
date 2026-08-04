@@ -294,7 +294,10 @@ func validatedPageCount(
     }
 
     let rounded = (contentSize.height / contentHeight).rounded(.up)
-    guard rounded.isFinite, rounded <= CGFloat(Int.max) else {
+    // `CGFloat(Int.max)` rounds to 2^63 on 64-bit platforms, which is one past
+    // the largest valid Int. A strict comparison keeps the conversion below
+    // that rounded boundary and therefore nontrapping.
+    guard rounded.isFinite, rounded < CGFloat(Int.max) else {
         throw .invalidContentGeometry("height exceeds the supported page-count range")
     }
     return max(1, Int(rounded))
