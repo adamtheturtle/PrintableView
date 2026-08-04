@@ -97,6 +97,32 @@ struct PrintableViewTests {
         }
     }
 
+    @Test func `documents beyond the configured page limit are rejected before rendering pages`() {
+        let configuration = PrintConfiguration(pageSize: letter, maximumPageCount: 2)
+
+        #expect(throws: PrintDocumentError.pageCountLimitExceeded(pageCount: 3, maximum: 2)) {
+            try renderPDF(Color.black.frame(height: 2_000), configuration: configuration)
+        }
+    }
+
+    @Test func `encoded PDFs beyond the configured byte limit are rejected`() {
+        let configuration = PrintConfiguration(pageSize: letter, maximumPDFBytes: 1)
+
+        #expect(throws: PrintDocumentError.pdfSizeLimitExceeded(maximumBytes: 1)) {
+            try renderPDF(Text("Too large"), configuration: configuration)
+        }
+    }
+
+    @Test func `resource limits must be positive`() {
+        let configuration = PrintConfiguration(pageSize: letter, maximumPageCount: 0)
+
+        #expect(throws: PrintDocumentError.invalidResourceLimit(
+            "maximumPageCount must be greater than zero"
+        )) {
+            try renderPDF(Text("Invalid limit"), configuration: configuration)
+        }
+    }
+
     @Test func `footer receives current and total page counts`() throws {
         let configuration = PrintConfiguration(
             pageSize: letter,
