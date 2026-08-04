@@ -185,7 +185,9 @@ public func printDocument<Content: View>(
 /// Renders `content` and presents the platform's standard print panel.
 ///
 /// This source-compatible convenience API uses a uniform margin. Use
-/// ``printDocument(configuration:content:)`` for footers, appearance, and asymmetric margins.
+/// ``printDocument(configuration:content:)`` or the `onError` overload when failure must
+/// be observable. This compatibility overload intentionally ignores rendering failures.
+@available(*, deprecated, message: "Use the throwing configuration overload or the onError overload")
 @MainActor
 public func printDocument(
     _ content: some View,
@@ -193,17 +195,41 @@ public func printDocument(
     pageSize: CGSize? = nil,
     margins: CGFloat = 36
 ) {
+    printDocument(
+        content,
+        jobTitle: jobTitle,
+        pageSize: pageSize,
+        margins: margins,
+        onError: { _ in }
+    )
+}
+
+/// Renders `content`, presents the platform print panel, and reports rendering failures.
+@MainActor
+public func printDocument(
+    _ content: some View,
+    jobTitle: String,
+    pageSize: CGSize? = nil,
+    margins: CGFloat = 36,
+    onError: (PrintDocumentError) -> Void
+) {
     let configuration = PrintConfiguration(
         pageSize: pageSize,
         margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
         jobTitle: jobTitle
     )
-    guard let data = try? renderPDF(content, configuration: configuration) else { return }
-    presentPrintPanel(
-        pdfData: data,
-        pageSize: pageSize ?? defaultPaperSize(),
-        jobTitle: jobTitle
-    )
+    do {
+        let data = try renderPDF(content, configuration: configuration)
+        presentPrintPanel(
+            pdfData: data,
+            pageSize: pageSize ?? defaultPaperSize(),
+            jobTitle: jobTitle
+        )
+    } catch let error as PrintDocumentError {
+        onError(error)
+    } catch {
+        assertionFailure("renderPDF threw an undocumented error: \(error)")
+    }
 }
 
 /// The original package-internal PDF entry point, retained for source and test compatibility.
