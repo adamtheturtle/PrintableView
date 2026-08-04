@@ -68,6 +68,26 @@ public struct PrintFooter {
     public static func attribution(sourceURL: URL, height: CGFloat = 18) -> PrintFooter {
         attribution(source: sourceURL.absoluteString, height: height)
     }
+
+    func formattedText(page: Int, pageCount: Int) -> String {
+        var result = ""
+        var lastWasSeparator = false
+        for scalar in text(page, pageCount).unicodeScalars {
+            let category = scalar.properties.generalCategory
+            let isSeparator = category == .control || category == .lineSeparator
+                || category == .paragraphSeparator
+            if isSeparator {
+                if !lastWasSeparator {
+                    result.append(" ")
+                }
+                lastWasSeparator = true
+            } else {
+                result.unicodeScalars.append(scalar)
+                lastWasSeparator = false
+            }
+        }
+        return result
+    }
 }
 
 /// Layout and presentation options for a printable SwiftUI document.
@@ -147,7 +167,7 @@ public func renderPDF(
 
             if let footer = configuration.footer {
                 drawFooter(
-                    footer.text(pageIndex + 1, pageCount),
+                    footer.formattedText(page: pageIndex + 1, pageCount: pageCount),
                     context: context,
                     bounds: layout.footerBounds
                 )
