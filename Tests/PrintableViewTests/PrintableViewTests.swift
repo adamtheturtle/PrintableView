@@ -46,6 +46,36 @@ struct PrintableViewTests {
         PDFDocument(data: data)?.page(at: page - 1)?.string
     }
 
+    private func pixel(_ data: Data, page: Int, at point: CGPoint) -> (red: UInt8, green: UInt8, blue: UInt8)? {
+        guard
+            let provider = CGDataProvider(data: data as CFData),
+            let document = CGPDFDocument(provider),
+            let pdfPage = document.page(at: page)
+        else {
+            return nil
+        }
+
+        let bounds = pdfPage.getBoxRect(.mediaBox)
+        let width = Int(bounds.width)
+        let height = Int(bounds.height)
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.drawPDFPage(pdfPage)
+        let offset = (Int(point.y) * width + Int(point.x)) * 4
+        return (pixels[offset], pixels[offset + 1], pixels[offset + 2])
+    }
+
     @Test func `short content produces a single page`() {
         let data = makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
         #expect(data != nil)
@@ -81,6 +111,21 @@ struct PrintableViewTests {
             configuration: PrintConfiguration(pageSize: letter)
         )
         #expect(pageCount(data) == 3)
+    }
+
+    @Test func `document background fills unused printable space on the final page`() throws {
+        let pageSize = CGSize(width: 100, height: 100)
+        let configuration = PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10),
+            background: .red
+        )
+        let data = try renderPDF(Text("Short"), configuration: configuration)
+        let sample = try #require(pixel(data, page: 1, at: CGPoint(x: 50, y: 15)))
+
+        #expect(sample.red > 200)
+        #expect(sample.green < 100)
+        #expect(sample.blue < 100)
     }
 
     @Test func `a renderer that emits no drawing callback is rejected`() throws {

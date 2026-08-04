@@ -6,7 +6,7 @@
 #if os(macOS)
     import AppKit
     import PDFKit
-#elseif os(iOS)
+#elseif os(iOS) || os(tvOS) || os(visionOS)
     import UIKit
 #endif
 import CoreGraphics
@@ -177,7 +177,6 @@ public func renderPDF(
     let document = content
         .frame(width: layout.contentWidth, alignment: .leading)
         .environment(\.colorScheme, configuration.colorScheme)
-        .background(configuration.background)
     let renderer = ImageRenderer(content: document)
     renderer.scale = 1
 
@@ -217,6 +216,7 @@ func renderPDFData(
 
     var renderingError: PrintDocumentError?
     var emittedPageCount = 0
+    let backgroundColor = resolvedCGColor(configuration.background, colorScheme: configuration.colorScheme)
     performRender { contentSize, renderInContext in
         let pageCount: Int
         do {
@@ -240,6 +240,11 @@ func renderPDFData(
         }
         for pageIndex in 0 ..< pageCount {
             context.beginPDFPage(nil)
+
+            context.saveGState()
+            context.setFillColor(backgroundColor)
+            context.fill(layout.contentBounds)
+            context.restoreGState()
 
             context.saveGState()
             context.clip(to: layout.contentBounds)
@@ -455,6 +460,26 @@ private func drawFooter(_ text: String, context: CGContext, bounds: CGRect) {
     context.textPosition = CGPoint(x: bounds.minX, y: bounds.minY + max(1, (bounds.height - fontSize) / 2))
     CTLineDraw(line, context)
     context.restoreGState()
+}
+
+@MainActor
+private func resolvedCGColor(_ color: Color, colorScheme: ColorScheme) -> CGColor {
+    #if os(macOS)
+        let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
+        guard let appearance = NSAppearance(named: appearanceName) else {
+            return NSColor(color).cgColor
+        }
+        var result = NSColor(color).cgColor
+        appearance.performAsCurrentDrawingAppearance {
+            result = NSColor(color).cgColor
+        }
+        return result
+    #elseif os(iOS) || os(tvOS) || os(visionOS)
+        let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        return UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style)).cgColor
+    #else
+        return CGColor(gray: colorScheme == .dark ? 0 : 1, alpha: 1)
+    #endif
 }
 
 @MainActor
