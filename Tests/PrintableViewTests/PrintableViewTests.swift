@@ -259,6 +259,45 @@ struct PrintableViewTests {
         #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
     }
 
+    @Test func `print presentation reports completion`() async throws {
+        let outcome = try await printDocument(
+            configuration: PrintConfiguration(pageSize: letter),
+            content: { Text("Print me") },
+            presenter: { _, _, _ in .completed }
+        )
+
+        #expect(outcome == .completed)
+    }
+
+    @Test func `print presentation distinguishes cancellation from failure`() async throws {
+        let outcome = try await printDocument(
+            configuration: PrintConfiguration(pageSize: letter),
+            content: { Text("Print me") },
+            presenter: { _, _, _ in .cancelled }
+        )
+
+        #expect(outcome == .cancelled)
+    }
+
+    @Test(arguments: [
+        (PrintPresentationResult.invalidPDF, PrintDocumentError.couldNotOpenRenderedPDF),
+        (PrintPresentationResult.operationUnavailable, PrintDocumentError.couldNotCreatePrintOperation),
+        (PrintPresentationResult.presentationRejected, PrintDocumentError.couldNotPresentPrintPanel),
+        (PrintPresentationResult.failed("offline"), PrintDocumentError.printOperationFailed("offline"))
+    ])
+    func `print presentation failures are surfaced`(
+        result: PrintPresentationResult,
+        expectedError: PrintDocumentError
+    ) async {
+        await #expect(throws: expectedError) {
+            try await printDocument(
+                configuration: PrintConfiguration(pageSize: letter),
+                content: { Text("Print me") },
+                presenter: { _, _, _ in result }
+            )
+        }
+    }
+
     @Test(arguments: [CGFloat.nan, CGFloat.infinity, -CGFloat.infinity])
     func nonFiniteContentSizesAreRejected(_ height: CGFloat) {
         #expect(throws: PrintDocumentError.self) {
