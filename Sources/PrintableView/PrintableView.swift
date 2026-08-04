@@ -22,6 +22,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
     case invalidContentGeometry(String)
     /// Core Graphics could not create a PDF destination.
     case couldNotCreatePDFContext
+    /// SwiftUI did not provide any drawing callback for the rendered view.
+    case renderProducedNoPages
 
     public var errorDescription: String? {
         switch self {
@@ -31,6 +33,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
             "Invalid rendered content geometry: \(reason)"
         case .couldNotCreatePDFContext:
             "The PDF drawing context could not be created."
+        case .renderProducedNoPages:
+            "The view renderer did not produce any PDF pages."
         }
     }
 }
@@ -157,6 +161,25 @@ public func renderPDF(
     let renderer = ImageRenderer(content: document)
     renderer.scale = 1
 
+    return try renderPDFData(
+        configuration: configuration,
+        pageSize: pageSize,
+        layout: layout
+    ) { body in
+        renderer.render(renderer: body)
+    }
+}
+
+typealias PDFRenderBody = (_ contentSize: CGSize, _ renderInContext: (CGContext) -> Void) -> Void
+
+@MainActor
+func renderPDFData(
+    configuration: PrintConfiguration,
+    pageSize: CGSize,
+    layout: ValidatedLayout,
+    performRender: (_ body: @escaping PDFRenderBody) -> Void
+) throws -> Data {
+
     let pdfData = NSMutableData()
     var mediaBox = CGRect(origin: .zero, size: pageSize)
     guard
@@ -167,7 +190,8 @@ public func renderPDF(
     }
 
     var renderingError: PrintDocumentError?
-    renderer.render { contentSize, renderInContext in
+    var emittedPageCount = 0
+    performRender { contentSize, renderInContext in
         let pageCount: Int
         do {
             pageCount = try validatedPageCount(
@@ -200,11 +224,15 @@ public func renderPDF(
                 )
             }
             context.endPDFPage()
+            emittedPageCount += 1
         }
     }
     context.closePDF()
     if let renderingError {
         throw renderingError
+    }
+    guard emittedPageCount > 0 else {
+        throw PrintDocumentError.renderProducedNoPages
     }
     return pdfData as Data
 }
@@ -316,14 +344,14 @@ func makeDocumentPDFData(
     )
 }
 
-private struct ValidatedLayout {
+struct ValidatedLayout {
     let contentWidth: CGFloat
     let contentHeight: CGFloat
     let contentBounds: CGRect
     let footerBounds: CGRect
 }
 
-private func validatedLayout(
+func validatedLayout(
     configuration: PrintConfiguration,
     pageSize: CGSize
 ) throws -> ValidatedLayout {

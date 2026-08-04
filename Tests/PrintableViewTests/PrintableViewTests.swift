@@ -83,6 +83,20 @@ struct PrintableViewTests {
         #expect(pageCount(data) == 3)
     }
 
+    @Test func `a renderer that emits no drawing callback is rejected`() throws {
+        let configuration = PrintConfiguration(pageSize: letter)
+        let layout = try validatedLayout(configuration: configuration, pageSize: letter)
+
+        #expect(throws: PrintDocumentError.renderProducedNoPages) {
+            try renderPDFData(
+                configuration: configuration,
+                pageSize: letter,
+                layout: layout,
+                performRender: { _ in }
+            )
+        }
+    }
+
     @Test func `footer receives current and total page counts`() throws {
         let configuration = PrintConfiguration(
             pageSize: letter,
