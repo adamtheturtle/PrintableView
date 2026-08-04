@@ -98,6 +98,12 @@ struct PrintableViewTests {
         #expect(pageText(data, page: 3)?.contains("Page 3 of 3") == true)
     }
 
+    @Test func `footer formatting normalizes line breaks and controls`() {
+        let footer = PrintFooter { _, _ in "Source\r\nSecond\tline\u{2028}last" }
+
+        #expect(footer.formattedText(page: 1, pageCount: 1) == "Source Second line last")
+    }
+
     @Test func `attribution footer includes source and page count`() throws {
         let configuration = PrintConfiguration(
             pageSize: letter,
