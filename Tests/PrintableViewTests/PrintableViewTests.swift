@@ -129,6 +129,17 @@ struct PrintableViewTests {
         #expect(pageText(data, page: 1)?.contains("https://example.com/") == true)
     }
 
+    @Test func `footer formatter output is bounded before Core Text conversion`() {
+        let footer = PrintFooter(maximumTextBytes: 16) { _, _ in
+            "prefix-" + String(repeating: "é", count: 10_000)
+        }
+        let text = footer.formattedText(page: 1, pageCount: 1)
+
+        #expect(text.hasPrefix("prefix-"))
+        #expect(text.utf8.count <= 16)
+        #expect(text.utf8.count > 0)
+    }
+
     @Test func `invalid geometry throws a meaningful error`() {
         let configuration = PrintConfiguration(
             pageSize: CGSize(width: 100, height: 100),

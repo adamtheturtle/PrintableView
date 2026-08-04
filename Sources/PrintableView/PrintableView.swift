@@ -38,6 +38,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
 public struct PrintFooter {
     /// The height reserved below document content, in points.
     public var height: CGFloat
+    /// The greatest UTF-8 byte count passed from the formatter to Core Text per page.
+    public var maximumTextBytes: Int
 
     let text: (_ page: Int, _ pageCount: Int) -> String
 
@@ -48,9 +50,11 @@ public struct PrintFooter {
     ///   - text: A formatter receiving the current one-based page number and total pages.
     public init(
         height: CGFloat = 18,
+        maximumTextBytes: Int = 4096,
         text: @escaping (_ page: Int, _ pageCount: Int) -> String
     ) {
         self.height = height
+        self.maximumTextBytes = maximumTextBytes
         self.text = text
     }
 
@@ -70,19 +74,25 @@ public struct PrintFooter {
     }
 
     func formattedText(page: Int, pageCount: Int) -> String {
+        let limit = max(0, maximumTextBytes)
         var result = ""
+        var byteCount = 0
         var lastWasSeparator = false
         for scalar in text(page, pageCount).unicodeScalars {
             let category = scalar.properties.generalCategory
             let isSeparator = category == .control || category == .lineSeparator
                 || category == .paragraphSeparator
             if isSeparator {
-                if !lastWasSeparator {
-                    result.append(" ")
-                }
+                guard !lastWasSeparator else { continue }
+                guard byteCount + 1 <= limit else { break }
+                result.append(" ")
+                byteCount += 1
                 lastWasSeparator = true
             } else {
+                let bytes = scalar.utf8.count
+                guard byteCount + bytes <= limit else { break }
                 result.unicodeScalars.append(scalar)
+                byteCount += bytes
                 lastWasSeparator = false
             }
         }
