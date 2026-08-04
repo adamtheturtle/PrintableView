@@ -174,6 +174,25 @@ struct PrintableViewTests {
         #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
     }
 
+    @Test(arguments: [CGFloat.nan, CGFloat.infinity, -CGFloat.infinity])
+    func nonFiniteContentSizesAreRejected(_ height: CGFloat) {
+        #expect(throws: PrintDocumentError.self) {
+            try validatedPageCount(contentSize: CGSize(width: 100, height: height), contentHeight: 100)
+        }
+    }
+
+    @Test func `negative and unrepresentably tall rendered sizes are rejected`() {
+        #expect(throws: PrintDocumentError.self) {
+            try validatedPageCount(contentSize: CGSize(width: 100, height: -1), contentHeight: 100)
+        }
+        #expect(throws: PrintDocumentError.self) {
+            try validatedPageCount(
+                contentSize: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude),
+                contentHeight: 0.5
+            )
+        }
+    }
+
     @Test func `larger margins yield more pages for the same content`() {
         let tall = Color.black.frame(height: 2000)
         let thin = makeDocumentPDFData(tall, pageSize: letter, margins: 36)
