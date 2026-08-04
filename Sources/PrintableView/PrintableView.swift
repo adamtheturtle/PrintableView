@@ -18,6 +18,8 @@ import SwiftUI
 public enum PrintDocumentError: Error, Equatable, LocalizedError {
     /// The page size, margins, or footer do not describe a usable page.
     case invalidPageGeometry(String)
+    /// The rendered view reported a size that cannot be paginated safely.
+    case invalidContentGeometry(String)
     /// Core Graphics could not create a PDF destination.
     case couldNotCreatePDFContext
 
@@ -25,6 +27,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
         switch self {
         case let .invalidPageGeometry(reason):
             "Invalid print page geometry: \(reason)"
+        case let .invalidContentGeometry(reason):
+            "Invalid rendered content geometry: \(reason)"
         case .couldNotCreatePDFContext:
             "The PDF drawing context could not be created."
         }
@@ -152,8 +156,21 @@ public func renderPDF(
         throw PrintDocumentError.couldNotCreatePDFContext
     }
 
+    var renderingError: PrintDocumentError?
     renderer.render { contentSize, renderInContext in
-        let pageCount = max(1, Int((contentSize.height / layout.contentHeight).rounded(.up)))
+        let pageCount: Int
+        do {
+            pageCount = try validatedPageCount(
+                contentSize: contentSize,
+                contentHeight: layout.contentHeight
+            )
+        } catch let error as PrintDocumentError {
+            renderingError = error
+            return
+        } catch {
+            assertionFailure("validatedPageCount threw an undocumented error: \(error)")
+            return
+        }
         for pageIndex in 0 ..< pageCount {
             context.beginPDFPage(nil)
 
@@ -176,7 +193,28 @@ public func renderPDF(
         }
     }
     context.closePDF()
+    if let renderingError {
+        throw renderingError
+    }
     return pdfData as Data
+}
+
+func validatedPageCount(
+    contentSize: CGSize,
+    contentHeight: CGFloat
+) throws(PrintDocumentError) -> Int {
+    guard contentSize.width.isFinite, contentSize.height.isFinite else {
+        throw .invalidContentGeometry("width and height must be finite")
+    }
+    guard contentSize.width >= 0, contentSize.height >= 0 else {
+        throw .invalidContentGeometry("width and height cannot be negative")
+    }
+
+    let rounded = (contentSize.height / contentHeight).rounded(.up)
+    guard rounded.isFinite, rounded <= CGFloat(Int.max) else {
+        throw .invalidContentGeometry("height exceeds the supported page-count range")
+    }
+    return max(1, Int(rounded))
 }
 
 /// Builds and renders a SwiftUI view to paginated PDF data.
