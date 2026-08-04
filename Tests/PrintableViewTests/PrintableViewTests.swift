@@ -151,6 +151,18 @@ struct PrintableViewTests {
         }
     }
 
+    @Test func `convenience printing reports render failures`() {
+        var reported: PrintDocumentError?
+        printDocument(
+            Text("Invalid"),
+            jobTitle: "Invalid",
+            pageSize: CGSize(width: CGFloat.nan, height: 100),
+            onError: { reported = $0 }
+        )
+
+        #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
+    }
+
     @Test func `larger margins yield more pages for the same content`() {
         let tall = Color.black.frame(height: 2000)
         let thin = makeDocumentPDFData(tall, pageSize: letter, margins: 36)
