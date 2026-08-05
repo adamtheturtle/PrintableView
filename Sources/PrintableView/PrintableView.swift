@@ -421,28 +421,6 @@ public func printDocument(
     }
 }
 
-/// Renders `content` and presents the platform's standard print panel.
-///
-/// This source-compatible convenience API uses a uniform margin. Use
-/// ``printDocument(configuration:content:)`` or the `onError` overload when failure must
-/// be observable. This compatibility overload intentionally ignores rendering failures.
-@available(*, deprecated, message: "Use the throwing configuration overload or the onError overload")
-@MainActor
-public func printDocument(
-    _ content: some View,
-    jobTitle: String,
-    pageSize: CGSize? = nil,
-    margins: CGFloat = 36
-) {
-    printDocument(
-        content,
-        jobTitle: jobTitle,
-        pageSize: pageSize,
-        margins: margins,
-        onError: { _ in }
-    )
-}
-
 /// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
 @MainActor
 public func printDocument(
