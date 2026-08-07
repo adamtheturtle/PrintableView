@@ -1,6 +1,6 @@
 # ``PrintableView``
 
-Print a SwiftUI view to paper — or Save-as-PDF — on macOS and iPadOS.
+Print a SwiftUI view to paper, or Save-as-PDF, on macOS and iPadOS.
 
 ## Overview
 
