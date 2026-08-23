@@ -722,13 +722,15 @@ func footerUsesRightToLeftLayout(for text: String) -> Bool {
     return false
 }
 
-private func footerFont(size: CGFloat) -> CTFont {
+func footerFont(size: CGFloat) -> CTFont {
+    // Bridge the platform system font directly. Looking the face up again via
+    // `CTFontCreateWithName(fontName)` rejects private system names such as
+    // `.AppleSystemUIFont` / `.SFUI-Regular` and substitutes Times New Roman.
     #if os(macOS)
-        let platformFont = NSFont.systemFont(ofSize: size)
+        NSFont.systemFont(ofSize: size) as CTFont
     #else
-        let platformFont = UIFont.systemFont(ofSize: size)
+        UIFont.systemFont(ofSize: size) as CTFont
     #endif
-    return CTFontCreateWithName(platformFont.fontName as CFString, size, nil)
 }
 
 @MainActor

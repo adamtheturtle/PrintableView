@@ -9,10 +9,17 @@
 //
 
 import CoreGraphics
+import CoreText
 import PDFKit
 import SwiftUI
 import Testing
 @testable import PrintableView
+
+#if os(macOS)
+    import AppKit
+#elseif os(iOS) || os(tvOS) || os(visionOS)
+    import UIKit
+#endif
 
 @MainActor
 struct PrintableViewTests {
@@ -486,6 +493,20 @@ struct PrintableViewTests {
     @Test func `rtl footer text is detected`() {
         #expect(footerUsesRightToLeftLayout(for: "مرحبا"))
         #expect(!footerUsesRightToLeftLayout(for: "Hello"))
+    }
+
+    @Test func `footer font bridges the platform system face`() {
+        let font = footerFont(size: 8)
+        #if os(macOS)
+            let expected = NSFont.systemFont(ofSize: 8) as CTFont
+        #else
+            let expected = UIFont.systemFont(ofSize: 8) as CTFont
+        #endif
+        #expect(
+            (CTFontCopyPostScriptName(font) as String)
+                == (CTFontCopyPostScriptName(expected) as String)
+        )
+        #expect((CTFontCopyPostScriptName(font) as String) != "TimesNewRomanPSMT")
     }
 
     @Test func `print configuration is sendable`() {
