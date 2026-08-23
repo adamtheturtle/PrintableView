@@ -300,6 +300,19 @@ struct PrintableViewTests {
         }
     }
 
+    @Test func `footer byte limit does not split grapheme clusters`() {
+        // Family emoji is multiple scalars / many UTF-8 bytes but one Character.
+        let family = "👨‍👩‍👧‍👦"
+        let footer = PrintFooter(maximumTextBytes: family.utf8.count) { _, _ in
+            family + "trailing"
+        }
+        let text = footer.formattedText(page: 1, pageCount: 1)
+
+        #expect(text == family)
+        #expect(text.count == 1)
+        #expect(text.utf8.count == family.utf8.count)
+    }
+
     @Test func `invalid geometry throws a meaningful error`() {
         let configuration = PrintConfiguration(
             pageSize: CGSize(width: 100, height: 100),

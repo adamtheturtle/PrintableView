@@ -131,10 +131,15 @@ public struct PrintFooter {
         var result = ""
         var byteCount = 0
         var lastWasSeparator = false
-        for scalar in text(page, pageCount).unicodeScalars {
-            let category = scalar.properties.generalCategory
-            let isSeparator = category == .control || category == .lineSeparator
-                || category == .paragraphSeparator
+        // Truncate on extended grapheme cluster boundaries so combining marks and
+        // multi-scalar emoji are not split mid-character.
+        for character in text(page, pageCount) {
+            let characterString = String(character)
+            let isSeparator = characterString.unicodeScalars.allSatisfy { scalar in
+                let category = scalar.properties.generalCategory
+                return category == .control || category == .lineSeparator
+                    || category == .paragraphSeparator
+            }
             if isSeparator {
                 guard !lastWasSeparator else { continue }
                 guard byteCount + 1 <= limit else { break }
@@ -142,9 +147,9 @@ public struct PrintFooter {
                 byteCount += 1
                 lastWasSeparator = true
             } else {
-                let bytes = scalar.utf8.count
+                let bytes = characterString.utf8.count
                 guard byteCount + bytes <= limit else { break }
-                result.unicodeScalars.append(scalar)
+                result.append(character)
                 byteCount += bytes
                 lastWasSeparator = false
             }
