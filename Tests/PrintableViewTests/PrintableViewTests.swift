@@ -487,4 +487,9 @@ struct PrintableViewTests {
         #expect(footerUsesRightToLeftLayout(for: "مرحبا"))
         #expect(!footerUsesRightToLeftLayout(for: "Hello"))
     }
+
+    @Test func `print configuration is sendable`() {
+        let configuration = PrintConfiguration(pageSize: letter, jobTitle: "Sendable")
+        #expect({ (_: PrintConfiguration) in true }(configuration))
+    }
 }
