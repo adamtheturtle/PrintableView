@@ -122,7 +122,8 @@ public struct PrintFooter {
     }
 
     func formattedText(page: Int, pageCount: Int) -> String {
-        let limit = max(0, maximumTextBytes)
+        let limit = maximumTextBytes
+        guard limit > 0 else { return "" }
         var result = ""
         var byteCount = 0
         var lastWasSeparator = false
@@ -231,6 +232,18 @@ func renderPDFData(
     }
     guard configuration.maximumPDFBytes > 0 else {
         throw PrintDocumentError.invalidResourceLimit("maximumPDFBytes must be greater than zero")
+    }
+    if let footer = configuration.footer {
+        guard footer.height > 0 else {
+            throw PrintDocumentError.invalidPageGeometry(
+                "footer height must be greater than zero when a footer is configured"
+            )
+        }
+        guard footer.maximumTextBytes > 0 else {
+            throw PrintDocumentError.invalidResourceLimit(
+                "maximumTextBytes must be greater than zero"
+            )
+        }
     }
 
     let pdfData = NSMutableData()
