@@ -893,15 +893,17 @@ actor PrintPresentationCoordinator {
         func install(_ continuation: CheckedContinuation<PrintPresentationResult, Never>) {
             self.continuation = continuation
             timeoutTask = Task { @MainActor in
-                await runIOSPrintTimeout(
-                    sleep: { try await Task.sleep(for: .seconds(600)) },
-                    onTimeout: {
-                        // Clear the shared controller so a timed-out sheet does not block
-                        // later presents after the continuation has already failed.
-                        UIPrintInteractionController.shared.dismiss(animated: false)
-                        finish(with: .failed("The print UI did not report a result."))
-                    }
-                )
+                do {
+                    try await Task.sleep(for: .seconds(600))
+                } catch is CancellationError {
+                    return
+                } catch {
+                    return
+                }
+                // Clear the shared controller so a timed-out sheet does not block
+                // later presents after the continuation has already failed.
+                UIPrintInteractionController.shared.dismiss(animated: false)
+                finish(with: .failed("The print UI did not report a result."))
             }
         }
 
