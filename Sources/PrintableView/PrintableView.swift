@@ -269,9 +269,11 @@ func renderPDFData(
         for pageIndex in 0 ..< pageCount {
             context.beginPDFPage(nil)
 
+            // Fill the full media box so margins share the configured background
+            // instead of remaining device-default black (#27, #28, #66).
             context.saveGState()
             context.setFillColor(backgroundColor)
-            context.fill(layout.contentBounds)
+            context.fill(CGRect(origin: .zero, size: pageSize))
             context.restoreGState()
 
             context.saveGState()
