@@ -193,13 +193,24 @@ public struct PrintConfiguration {
 /// Renders a SwiftUI view to deterministic, paginated vector PDF data.
 ///
 /// Content is laid out at the printable width and divided into vertical page-height bands.
-/// Views backed by native platform frameworks, such as web views, maps, video, or Metal,
-/// may render as blank rectangles due to `ImageRenderer` limitations.
+///
+/// ## Platform view limitations
+///
+/// `ImageRenderer` rasterizes SwiftUI into PDF vector paths. Views backed by native
+/// platform frameworks—`WKWebView`, `MKMapView`, `AVPlayerViewController`, Metal-backed
+/// content, and other layer-hosted UI—often draw as **blank rectangles** with no error.
+/// Pre-render such content to an `Image` or pure SwiftUI, or verify output before printing.
+///
+/// - Parameter content: Pure SwiftUI content to paginate.
+/// - Parameter configuration: Page geometry, appearance, and resource limits.
+/// - Returns: Paginated PDF bytes suitable for printing or saving.
+/// - Throws: ``PrintDocumentError`` when geometry, limits, or encoding fail.
 @MainActor
 public func renderPDF(
     _ content: some View,
     configuration: PrintConfiguration = PrintConfiguration()
 ) throws -> Data {
+    try Task.checkCancellation()
     let pageSize = configuration.pageSize ?? defaultPaperSize()
     let layout = try validatedLayout(configuration: configuration, pageSize: pageSize)
 
