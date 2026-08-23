@@ -6,12 +6,44 @@ on: pull_request
 permissions:
   contents: write
   pull-requests: write
+  checks: read
 
 jobs:
   dependabot:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
+      - name: Wait for CI checks to pass
+        run: |
+          set -euo pipefail
+          # Wait only for package CI jobs — never for this workflow itself (deadlock).
+          required=("Build & Test (macOS)" "Build (iOS)" "Vale")
+          deadline=$((SECONDS + 2400))
+          while (( SECONDS < deadline )); do
+            json=$(gh pr view "$PR_URL" --json statusCheckRollup)
+            all_ok=true
+            for name in "${required[@]}"; do
+              conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '
+                [.statusCheckRollup[] | select(.name == $n) | .conclusion] | first // empty
+              ')
+              if [[ "$conclusion" != "SUCCESS" ]]; then
+                all_ok=false
+                break
+              fi
+            done
+            if $all_ok; then
+              echo "Required CI checks passed."
+              exit 0
+            fi
+            echo "Waiting for required CI checks..."
+            sleep 20
+          done
+          echo "Timed out waiting for required CI checks." >&2
+          exit 1
+        env:
+          PR_URL: ${{github.event.pull_request.html_url}}
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
       - name: Enable auto-merge for Dependabot PRs
         run: gh pr merge --auto --merge "$PR_URL"
         env:
