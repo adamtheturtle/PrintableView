@@ -225,6 +225,40 @@ struct PrintableViewTests {
         #expect(text.utf8.count > 0)
     }
 
+    @Test func `non-positive footer maximumTextBytes is rejected`() {
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: PrintFooter(maximumTextBytes: 0) { _, _ in "Footer" }
+        )
+        #expect(throws: PrintDocumentError.invalidResourceLimit(
+            "maximumTextBytes must be greater than zero"
+        )) {
+            try renderPDF(Text("Document"), configuration: configuration)
+        }
+
+        let negative = PrintConfiguration(
+            pageSize: letter,
+            footer: PrintFooter(maximumTextBytes: -1) { _, _ in "Footer" }
+        )
+        #expect(throws: PrintDocumentError.invalidResourceLimit(
+            "maximumTextBytes must be greater than zero"
+        )) {
+            try renderPDF(Text("Document"), configuration: negative)
+        }
+    }
+
+    @Test func `zero-height footer is rejected with a diagnostic`() {
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: PrintFooter(height: 0) { _, _ in "Invisible" }
+        )
+        #expect(throws: PrintDocumentError.invalidPageGeometry(
+            "footer height must be greater than zero when a footer is configured"
+        )) {
+            try renderPDF(Text("Document"), configuration: configuration)
+        }
+    }
+
     @Test func `invalid geometry throws a meaningful error`() {
         let configuration = PrintConfiguration(
             pageSize: CGSize(width: 100, height: 100),
