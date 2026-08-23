@@ -594,6 +594,21 @@ private func defaultPaperSize() -> CGSize {
 
 private let usLetter = CGSize(width: 612, height: 792)
 
+/// Returns whether every page in `document` has a positive media box matching `expectedPageSize`.
+func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> Bool {
+    guard document.pageCount > 0 else { return false }
+    for index in 0 ..< document.pageCount {
+        guard let page = document.page(at: index) else { return false }
+        let mediaBox = page.bounds(for: .mediaBox)
+        guard mediaBox.width > 0, mediaBox.height > 0 else { return false }
+        guard abs(mediaBox.width - expectedPageSize.width) <= 1,
+              abs(mediaBox.height - expectedPageSize.height) <= 1 else {
+            return false
+        }
+    }
+    return true
+}
+
 #if os(macOS)
     @MainActor
     private func livePrintPanelPresenter(
@@ -602,6 +617,7 @@ private let usLetter = CGSize(width: 612, height: 792)
         jobTitle: String
     ) async -> PrintPresentationResult {
         guard let document = PDFDocument(data: pdfData) else { return .invalidPDF }
+        guard validatedRenderedPDF(document, expectedPageSize: pageSize) else { return .invalidPDF }
         let info = NSPrintInfo()
         info.paperSize = pageSize
         info.topMargin = 0

@@ -397,4 +397,17 @@ struct PrintableViewTests {
         #expect(image != nil)
         #expect((image?.width ?? 0) > 0 && (image?.height ?? 0) > 0)
     }
+
+    @Test func `validated rendered PDF accepts matching page geometry`() throws {
+        let data = try renderPDF(Text("Valid"), configuration: PrintConfiguration(pageSize: letter))
+        let document = try #require(PDFDocument(data: data))
+        #expect(validatedRenderedPDF(document, expectedPageSize: letter))
+    }
+
+    @Test func `validated rendered PDF rejects mismatched page geometry`() throws {
+        let data = try renderPDF(Text("Valid"), configuration: PrintConfiguration(pageSize: letter))
+        let document = try #require(PDFDocument(data: data))
+        let wrongSize = CGSize(width: letter.width + 10, height: letter.height)
+        #expect(!validatedRenderedPDF(document, expectedPageSize: wrongSize))
+    }
 }
