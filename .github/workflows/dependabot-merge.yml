@@ -26,10 +26,17 @@ jobs:
               conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '
                 [.statusCheckRollup[] | select(.name == $n) | .conclusion] | first // empty
               ')
-              if [[ "$conclusion" != "SUCCESS" ]]; then
-                all_ok=false
-                break
-              fi
+              case "$conclusion" in
+                SUCCESS) ;;
+                FAILURE|CANCELLED|TIMED_OUT)
+                  echo "Required check '$name' concluded with $conclusion." >&2
+                  exit 1
+                  ;;
+                *)
+                  all_ok=false
+                  break
+                  ;;
+              esac
             done
             if $all_ok; then
               echo "Required CI checks passed."
