@@ -27,6 +27,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
     case renderProducedNoPages
     /// A configured resource ceiling cannot be enforced because it is not positive.
     case invalidResourceLimit(String)
+    /// The print job title is empty after trimming whitespace.
+    case invalidJobTitle(String)
     /// Rendering would require more pages than the configured ceiling.
     case pageCountLimitExceeded(pageCount: Int, maximum: Int)
     /// The encoded PDF grew beyond the configured byte ceiling.
@@ -54,6 +56,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
             "The view renderer did not produce any PDF pages."
         case let .invalidResourceLimit(reason):
             "Invalid print resource limit: \(reason)"
+        case let .invalidJobTitle(reason):
+            "Invalid print job title: \(reason)"
         case let .pageCountLimitExceeded(pageCount, maximum):
             "The document requires \(pageCount) pages, exceeding the configured maximum of \(maximum)."
         case let .pdfSizeLimitExceeded(maximumBytes):
@@ -448,7 +452,7 @@ func printDocument<Content: View>(
 ) async throws -> PrintPresentationOutcome {
     let trimmedTitle = configuration.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedTitle.isEmpty else {
-        throw PrintDocumentError.invalidResourceLimit("jobTitle must not be empty")
+        throw PrintDocumentError.invalidJobTitle("jobTitle must not be empty")
     }
     var configuration = configuration
     configuration.jobTitle = trimmedTitle
