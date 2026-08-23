@@ -317,8 +317,11 @@ func validatedPageCount(
     guard contentSize.width.isFinite, contentSize.height.isFinite else {
         throw .invalidContentGeometry("width and height must be finite")
     }
-    guard contentSize.width >= 0, contentSize.height >= 0 else {
-        throw .invalidContentGeometry("width and height cannot be negative")
+    guard contentSize.width > 0 else {
+        throw .invalidContentGeometry("width must be greater than zero")
+    }
+    guard contentSize.height > 0 else {
+        throw .invalidContentGeometry("height must be greater than zero")
     }
 
     let rounded = (contentSize.height / contentHeight).rounded(.up)
