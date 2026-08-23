@@ -500,10 +500,14 @@ public func printDocument(
     }
 }
 
-/// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
+/// Renders `content`, presents the platform print panel, and reports outcome or failure.
 ///
 /// Returns a structured task the caller can retain or cancel. The task completes after
 /// presentation finishes or a render error is reported.
+///
+/// - Parameters:
+///   - onComplete: Invoked when printing completes or the user cancels.
+///   - onError: Invoked when rendering or presentation fails.
 @discardableResult
 @MainActor
 public func printDocument(
@@ -511,6 +515,7 @@ public func printDocument(
     jobTitle: String,
     pageSize: CGSize? = nil,
     margins: CGFloat = 36,
+    onComplete: (@MainActor (PrintPresentationOutcome) -> Void)? = nil,
     onError: @escaping @MainActor (PrintDocumentError) -> Void
 ) -> Task<Void, Never> {
     printDocument(
@@ -518,14 +523,19 @@ public func printDocument(
         jobTitle: jobTitle,
         pageSize: pageSize,
         margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
+        onComplete: onComplete,
         onError: onError
     )
 }
 
-/// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
+/// Renders `content`, presents the platform print panel, and reports outcome or failure.
 ///
 /// Returns a structured task the caller can retain or cancel. The task completes after
 /// presentation finishes or a render error is reported.
+///
+/// - Parameters:
+///   - onComplete: Invoked when printing completes or the user cancels.
+///   - onError: Invoked when rendering or presentation fails.
 @discardableResult
 @MainActor
 public func printDocument(
@@ -533,6 +543,7 @@ public func printDocument(
     jobTitle: String,
     pageSize: CGSize? = nil,
     margins: EdgeInsets,
+    onComplete: (@MainActor (PrintPresentationOutcome) -> Void)? = nil,
     onError: @escaping @MainActor (PrintDocumentError) -> Void
 ) -> Task<Void, Never> {
     let configuration = PrintConfiguration(
@@ -549,7 +560,8 @@ public func printDocument(
                 jobTitle: jobTitle
             )
             do {
-                _ = try presentationOutcome(for: result)
+                let outcome = try presentationOutcome(for: result)
+                onComplete?(outcome)
             } catch let error as PrintDocumentError {
                 onError(error)
             } catch is CancellationError {
