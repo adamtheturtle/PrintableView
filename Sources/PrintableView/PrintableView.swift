@@ -88,7 +88,10 @@ public enum PrintPresentationOutcome: Equatable, Sendable {
 ///
 /// Footer text is clipped to the page's printable width and the configured height. The
 /// formatter receives one-based page numbers after pagination is complete.
-public struct PrintFooter {
+///
+/// The `text` closure runs on the main actor during PDF rendering. Keep it fast and
+/// avoid touching UIKit or AppKit views directly from the closure.
+public struct PrintFooter: Sendable {
     /// The height reserved below document content, in points.
     public var height: CGFloat
     /// The greatest UTF-8 byte count passed from the formatter to Core Text per page.
@@ -104,7 +107,7 @@ public struct PrintFooter {
     public init(
         height: CGFloat = 18,
         maximumTextBytes: Int = 4096,
-        text: @escaping (_ page: Int, _ pageCount: Int) -> String
+        text: @escaping @Sendable (_ page: Int, _ pageCount: Int) -> String
     ) {
         self.height = height
         self.maximumTextBytes = maximumTextBytes
@@ -178,7 +181,7 @@ func sanitizedAttributionSource(_ url: URL) -> String {
 }
 
 /// Layout and presentation options for a printable SwiftUI document.
-public struct PrintConfiguration {
+public struct PrintConfiguration: Sendable {
     /// The paper size in points. Pass `nil` to use US Letter (612 × 792 pt).
     public var pageSize: CGSize?
     /// The inset from each paper edge, in points.
@@ -188,6 +191,9 @@ public struct PrintConfiguration {
     /// The title shown by the system print panel and print queue.
     public var jobTitle: String
     /// The appearance used to resolve adaptive colors in the rendered view.
+    ///
+    /// Defaults to ``ColorScheme/light``. Pass ``ColorScheme/dark`` when printing onto
+    /// dark backgrounds, or set explicitly to match the surrounding UI.
     public var colorScheme: ColorScheme
     /// The background drawn behind the document content.
     public var background: Color
