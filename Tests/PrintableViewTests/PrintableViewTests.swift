@@ -666,6 +666,25 @@ struct PrintableViewTests {
         )
         #expect(flag.value)
     }
+
+    @Test func `print presentation coordinator serializes concurrent work`() async {
+        let coordinator = PrintPresentationCoordinator()
+        let counter = ConcurrencyPeakCounter()
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0 ..< 2 {
+                group.addTask {
+                    await coordinator.run {
+                        await counter.enter()
+                        try? await Task.sleep(for: .milliseconds(50))
+                        await counter.leave()
+                    }
+                }
+            }
+        }
+
+        #expect(await counter.peak == 1)
+    }
 }
 
 private final class TimeoutFlag: @unchecked Sendable {
@@ -682,5 +701,19 @@ private final class TimeoutFlag: @unchecked Sendable {
         lock.lock()
         triggered = true
         lock.unlock()
+    }
+}
+
+private actor ConcurrencyPeakCounter {
+    private(set) var peak = 0
+    private var active = 0
+
+    func enter() {
+        active += 1
+        peak = max(peak, active)
+    }
+
+    func leave() {
+        active -= 1
     }
 }

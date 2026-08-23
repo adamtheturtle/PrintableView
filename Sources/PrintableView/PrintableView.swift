@@ -808,6 +808,32 @@ func runIOSPrintTimeout(
     onTimeout()
 }
 
+/// Serializes print UI presentation so concurrent jobs cannot stomp shared state.
+actor PrintPresentationCoordinator {
+    private var locked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func run<T: Sendable>(_ body: @Sendable () async -> T) async -> T {
+        await acquire()
+        defer { release() }
+        return await body()
+    }
+
+    private func acquire() async {
+        while locked {
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        locked = true
+    }
+
+    private func release() {
+        locked = false
+        if !waiters.isEmpty {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 #if os(macOS)
     @MainActor
     private func livePrintPanelPresenter(
@@ -846,6 +872,17 @@ func runIOSPrintTimeout(
         return .failed("The print operation did not complete successfully.")
     }
 #elseif os(iOS)
+    private actor IOSPrintPresentationCoordinator {
+        static let shared = IOSPrintPresentationCoordinator()
+        private let coordinator = PrintPresentationCoordinator()
+
+        func run(
+            _ body: @MainActor @Sendable () async -> PrintPresentationResult
+        ) async -> PrintPresentationResult {
+            await coordinator.run { await body() }
+        }
+    }
+
     @MainActor
     private final class PrintCompletionGate {
         private var continuation: CheckedContinuation<PrintPresentationResult, Never>?
@@ -883,24 +920,26 @@ func runIOSPrintTimeout(
         pageSize: CGSize,
         jobTitle: String
     ) async -> PrintPresentationResult {
-        let info = UIPrintInfo(dictionary: nil)
-        info.jobName = jobTitle
-        info.outputType = .general
-        info.paperRect = CGRect(origin: .zero, size: pageSize)
-        let controller = UIPrintInteractionController.shared
-        controller.printInfo = info
-        controller.printingItem = pdfData
-        let gate = PrintCompletionGate()
-        return await withCheckedContinuation { continuation in
-            gate.install(continuation)
-            let didPresent = controller.present(animated: true) { _, completed, error in
-                let result = iosPrintPanelResult(completed: completed, error: error)
-                Task { @MainActor in
-                    gate.finish(with: result)
+        await IOSPrintPresentationCoordinator.shared.run {
+            let info = UIPrintInfo(dictionary: nil)
+            info.jobName = jobTitle
+            info.outputType = .general
+            info.paperRect = CGRect(origin: .zero, size: pageSize)
+            let controller = UIPrintInteractionController.shared
+            controller.printInfo = info
+            controller.printingItem = pdfData
+            let gate = PrintCompletionGate()
+            return await withCheckedContinuation { continuation in
+                gate.install(continuation)
+                let didPresent = controller.present(animated: true) { _, completed, error in
+                    let result = iosPrintPanelResult(completed: completed, error: error)
+                    Task { @MainActor in
+                        gate.finish(with: result)
+                    }
                 }
-            }
-            if !didPresent {
-                gate.finish(with: .presentationRejected)
+                if !didPresent {
+                    gate.finish(with: .presentationRejected)
+                }
             }
         }
     }
