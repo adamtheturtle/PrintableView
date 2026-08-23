@@ -582,6 +582,36 @@ struct PrintableViewTests {
         #expect((image?.width ?? 0) > 0 && (image?.height ?? 0) > 0)
     }
 
+    @Test func `print code line pages respect the printable band height`() {
+        let lines = (1 ... 10).map { "Line \($0)" }
+        let pages = printCodeLinePages(code: lines.joined(separator: "\n"), bandHeight: 60)
+        let linesPerPage = max(1, Int(floor(60 / printCodeLineHeight())))
+
+        #expect(!pages.isEmpty)
+        #expect(pages.allSatisfy { $0.count <= linesPerPage })
+        #expect(pages.flatMap(\.self) == lines)
+    }
+
+    @Test func `print code paginates on line boundaries in PDF output`() throws {
+        let lines = (1 ... 40).map { "Line \($0)" }
+        let configuration = PrintConfiguration(
+            pageSize: CGSize(width: 200, height: 120),
+            margins: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        )
+        let data = try renderPDF(
+            PrintCode(code: lines.joined(separator: "\n")),
+            configuration: configuration
+        )
+        let pages = try #require(pageCount(data))
+        #expect(pages > 1)
+        for pageIndex in 1 ... pages {
+            let text = try #require(pageText(data, page: pageIndex))
+            for fragment in text.components(separatedBy: .newlines) where !fragment.isEmpty {
+                #expect(fragment.hasPrefix("Line "))
+            }
+        }
+    }
+
     @Test func `validated rendered PDF accepts matching page geometry`() throws {
         let data = try renderPDF(Text("Valid"), configuration: PrintConfiguration(pageSize: letter))
         let document = try #require(PDFDocument(data: data))
