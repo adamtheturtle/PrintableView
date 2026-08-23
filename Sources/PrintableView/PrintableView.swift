@@ -899,6 +899,7 @@ public struct PrintCode: View {
     public var body: some View {
         Text(code)
             .font(.system(.footnote, design: .monospaced))
+            .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
