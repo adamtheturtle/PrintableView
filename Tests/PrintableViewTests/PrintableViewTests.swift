@@ -150,6 +150,44 @@ struct PrintableViewTests {
         #expect(sample.blue < 100)
     }
 
+    @Test func `document background fills all margin bands outside content bounds`() throws {
+        let pageSize = CGSize(width: 100, height: 100)
+        let configuration = PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: 20, leading: 20, bottom: 20, trailing: 20),
+            background: .red
+        )
+        let data = try renderPDF(Text("Short"), configuration: configuration)
+        let marginSamples = [
+            CGPoint(x: 50, y: 5), // top
+            CGPoint(x: 5, y: 50), // leading
+            CGPoint(x: 95, y: 50), // trailing
+            CGPoint(x: 50, y: 95) // bottom
+        ]
+        for point in marginSamples {
+            let sample = try #require(pixel(data, page: 1, at: point))
+            #expect(sample.red > 200)
+            #expect(sample.green < 100)
+            #expect(sample.blue < 100)
+        }
+    }
+
+    @Test func `document background fills margin bands when a footer is configured`() throws {
+        let pageSize = CGSize(width: 100, height: 100)
+        let configuration = PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: 15, leading: 15, bottom: 15, trailing: 15),
+            footer: PrintFooter(height: 10) { _, _ in "Footer" },
+            background: .red
+        )
+        let data = try renderPDF(Text("Short"), configuration: configuration)
+        let sample = try #require(pixel(data, page: 1, at: CGPoint(x: 50, y: 8)))
+
+        #expect(sample.red > 200)
+        #expect(sample.green < 100)
+        #expect(sample.blue < 100)
+    }
+
     @Test func `a renderer that emits no drawing callback is rejected`() throws {
         let configuration = PrintConfiguration(pageSize: letter)
         let layout = try validatedLayout(configuration: configuration, pageSize: letter)
