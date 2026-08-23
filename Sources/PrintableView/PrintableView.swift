@@ -684,7 +684,10 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
             return .presentationRejected
         }
         operation.showsPrintPanel = false
-        return operation.run() ? .completed : .failed(nil)
+        if operation.run() {
+            return .completed
+        }
+        return .failed("The print operation did not complete successfully.")
     }
 #elseif os(iOS)
     @MainActor
