@@ -365,6 +365,18 @@ struct PrintableViewTests {
         #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
     }
 
+    @Test func `callback printing reports render errors before returning`() {
+        var reported: PrintDocumentError?
+        _ = printDocument(
+            Text("Invalid"),
+            jobTitle: "Invalid",
+            pageSize: CGSize(width: CGFloat.nan, height: 100),
+            onError: { reported = $0 }
+        )
+
+        #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
+    }
+
     @Test func `callback printing returns a structured task`() {
         let task = printDocument(
             Text("Never presented"),
