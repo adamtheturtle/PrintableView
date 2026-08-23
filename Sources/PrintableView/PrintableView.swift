@@ -254,6 +254,7 @@ public func renderPDF(
     let document = content
         .frame(width: layout.contentWidth, alignment: .leading)
         .environment(\.colorScheme, configuration.colorScheme)
+        .environment(\.printableBandHeight, layout.contentHeight)
     let renderer = ImageRenderer(content: document)
     renderer.scale = 1
 
@@ -947,6 +948,46 @@ actor PrintPresentationCoordinator {
 
 // MARK: - Print layout primitives
 
+private struct PrintableBandHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var printableBandHeight: CGFloat? {
+        get { self[PrintableBandHeightKey.self] }
+        set { self[PrintableBandHeightKey.self] = newValue }
+    }
+}
+
+/// Estimated monospaced footnote line height used for ``PrintCode`` pagination.
+func printCodeLineHeight() -> CGFloat {
+    #if os(macOS)
+        let font = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        return ceil(font.ascender - font.descender + font.leading)
+    #elseif os(iOS) || os(tvOS) || os(visionOS)
+        let font = UIFont.monospacedSystemFont(ofSize: UIFont.smallSystemFontSize, weight: .regular)
+        return ceil(font.lineHeight)
+    #else
+        return 14
+    #endif
+}
+
+/// Splits `code` into page-sized line groups that fit within `bandHeight`.
+func printCodeLinePages(code: String, bandHeight: CGFloat) -> [[String]] {
+    let lineHeight = printCodeLineHeight()
+    let linesPerPage = max(1, Int(floor(bandHeight / lineHeight)))
+    let lines = code.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    guard !lines.isEmpty else { return [[""]] }
+    var pages: [[String]] = []
+    var index = lines.startIndex
+    while index < lines.endIndex {
+        let end = lines.index(index, offsetBy: linesPerPage, limitedBy: lines.endIndex) ?? lines.endIndex
+        pages.append(Array(lines[index ..< end]))
+        index = end
+    }
+    return pages
+}
+
 /// A titled block in a printed document.
 public struct PrintSection<Content: View>: View {
     private let title: String
@@ -967,18 +1008,54 @@ public struct PrintSection<Content: View>: View {
 }
 
 /// Monospaced, wrapping text suitable for printed source code.
+///
+/// When rendered through ``renderPDF(_:configuration:)``, ``PrintCode`` pre-splits lines
+/// into page-height bands so geometric pagination breaks on line boundaries rather than
+/// mid-line.
 public struct PrintCode: View {
     private let code: String
+    @Environment(\.printableBandHeight) private var printableBandHeight
+
+    private static let lineFont = Font.system(.footnote, design: .monospaced)
 
     public init(code: String) {
         self.code = code
     }
 
     public var body: some View {
+        if let bandHeight = printableBandHeight {
+            paginatedBody(bandHeight: bandHeight)
+        } else {
+            singleBlockBody
+        }
+    }
+
+    private var singleBlockBody: some View {
         Text(code)
-            .font(.system(.footnote, design: .monospaced))
+            .font(Self.lineFont)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private func paginatedBody(bandHeight: CGFloat) -> some View {
+        let lineHeight = printCodeLineHeight()
+        let pages = printCodeLinePages(code: code, bandHeight: bandHeight)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(pages.enumerated()), id: \.offset) { _, pageLines in
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(pageLines.enumerated()), id: \.offset) { _, line in
+                        Text(line.isEmpty ? " " : line)
+                            .font(Self.lineFont)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(height: lineHeight, alignment: .topLeading)
+                    }
+                }
+                .frame(height: bandHeight, alignment: .topLeading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
