@@ -608,8 +608,9 @@ private let usLetter = CGSize(width: 612, height: 792)
         info.bottomMargin = 0
         info.leftMargin = 0
         info.rightMargin = 0
-        info.horizontalPagination = .fit
-        info.verticalPagination = .fit
+        // Clip rather than fit so pre-paginated PDF pages are not rescaled (#41).
+        info.horizontalPagination = .clip
+        info.verticalPagination = .clip
         guard let operation = document.printOperation(for: info, scalingMode: .pageScaleNone,
                                                        autoRotate: false) else {
             return .operationUnavailable
