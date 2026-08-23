@@ -388,6 +388,23 @@ struct PrintableViewTests {
         #expect(task.isCancelled)
     }
 
+    @Test func `cancelled callback task skips render and presentation`() async {
+        var reportedError = false
+        var reportedCompletion = false
+        let task = printDocument(
+            Text("Should not print"),
+            jobTitle: "Cancelled",
+            pageSize: letter,
+            onComplete: { _ in reportedCompletion = true },
+            onError: { _ in reportedError = true }
+        )
+        task.cancel()
+        await task.value
+
+        #expect(!reportedError)
+        #expect(!reportedCompletion)
+    }
+
     @Test func `empty job titles are rejected`() async {
         await #expect(throws: PrintDocumentError.invalidJobTitle("jobTitle must not be empty")) {
             try await printDocument(
