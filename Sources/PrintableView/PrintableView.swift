@@ -530,8 +530,9 @@ public func printDocument(
 ///
 /// Returns a structured task the caller can retain or cancel. Rendering runs before this
 /// function returns so MainActor state updates in the same turn cannot change the document.
-/// The returned task covers print presentation; cancel it to abandon presentation after
-/// render has already completed.
+/// The returned task checks cancellation before presentation; cancel it to abandon
+/// presentation after render has already completed. Once presentation has started,
+/// platform print panels are not cancelled cooperatively.
 ///
 /// - Parameters:
 ///   - onComplete: Invoked when printing completes or the user cancels.
@@ -560,8 +561,9 @@ public func printDocument(
 ///
 /// Returns a structured task the caller can retain or cancel. Rendering runs before this
 /// function returns so MainActor state updates in the same turn cannot change the document.
-/// The returned task covers print presentation; cancel it to abandon presentation after
-/// render has already completed.
+/// The returned task checks cancellation before presentation; cancel it to abandon
+/// presentation after render has already completed. Once presentation has started,
+/// platform print panels are not cancelled cooperatively.
 ///
 /// - Parameters:
 ///   - onComplete: Invoked when printing completes or the user cancels.
@@ -581,21 +583,23 @@ public func printDocument(
         margins: margins,
         jobTitle: jobTitle
     )
+    guard !Task.isCancelled else { return Task<Void, Never> {} }
     let data: Data
     do {
         data = try renderPDF(content, configuration: configuration)
     } catch let error as PrintDocumentError {
         onError(error)
-        return Task {}
+        return Task<Void, Never> {}
     } catch is CancellationError {
-        return Task {}
+        return Task<Void, Never> {}
     } catch {
         onError(.unexpected("renderPDF threw an undocumented error: \(error)"))
-        return Task {}
+        return Task<Void, Never> {}
     }
 
     let resolvedPageSize = pageSize ?? defaultPaperSize()
     return Task { @MainActor in
+        guard !Task.isCancelled else { return }
         let result = await livePrintPanelPresenter(
             pdfData: data,
             pageSize: resolvedPageSize,
