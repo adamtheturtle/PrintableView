@@ -39,6 +39,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
     case couldNotPresentPrintPanel
     /// Printing failed after the user accepted the platform print UI.
     case printOperationFailed(String?)
+    /// An unexpected error escaped a print API that only documents `PrintDocumentError`.
+    case unexpected(String)
 
     public var errorDescription: String? {
         switch self {
@@ -68,6 +70,8 @@ public enum PrintDocumentError: Error, Equatable, LocalizedError {
             } else {
                 "The print operation failed."
             }
+        case let .unexpected(reason):
+            "An unexpected print error occurred: \(reason)"
         }
     }
 }
@@ -304,7 +308,7 @@ func renderPDFData(
             renderingError = error
             return
         } catch {
-            assertionFailure("validatedPageCount threw an undocumented error: \(error)")
+            renderingError = .unexpected("validatedPageCount threw an undocumented error: \(error)")
             return
         }
         guard pageCount <= configuration.maximumPageCount else {
@@ -568,14 +572,14 @@ public func printDocument(
             } catch is CancellationError {
                 return
             } catch {
-                assertionFailure("print presentation threw an undocumented error: \(error)")
+                onError(.unexpected("print presentation threw an undocumented error: \(error)"))
             }
         } catch let error as PrintDocumentError {
             onError(error)
         } catch is CancellationError {
             return
         } catch {
-            assertionFailure("renderPDF threw an undocumented error: \(error)")
+            onError(.unexpected("renderPDF threw an undocumented error: \(error)"))
         }
     }
 }
