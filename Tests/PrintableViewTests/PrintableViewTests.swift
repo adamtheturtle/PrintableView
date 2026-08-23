@@ -482,4 +482,9 @@ struct PrintableViewTests {
         let wrongSize = CGSize(width: letter.width + 10, height: letter.height)
         #expect(!validatedRenderedPDF(document, expectedPageSize: wrongSize))
     }
+
+    @Test func `rtl footer text is detected`() {
+        #expect(footerUsesRightToLeftLayout(for: "مرحبا"))
+        #expect(!footerUsesRightToLeftLayout(for: "Hello"))
+    }
 }

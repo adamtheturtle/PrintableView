@@ -672,12 +672,36 @@ private func drawFooter(
             CGColor(gray: gray, alpha: 1)
     ]
     let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+    var ascent: CGFloat = 0
+    var descent: CGFloat = 0
+    var leading: CGFloat = 0
+    let lineWidth = CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+    let xPosition: CGFloat
+    if footerUsesRightToLeftLayout(for: text) {
+        xPosition = bounds.maxX - lineWidth
+    } else {
+        xPosition = bounds.minX
+    }
     context.saveGState()
     context.clip(to: bounds)
     context.textMatrix = .identity
-    context.textPosition = CGPoint(x: bounds.minX, y: bounds.minY + max(1, (bounds.height - fontSize) / 2))
+    context.textPosition = CGPoint(x: xPosition, y: bounds.minY + max(1, (bounds.height - fontSize) / 2))
     CTLineDraw(line, context)
     context.restoreGState()
+}
+
+func footerUsesRightToLeftLayout(for text: String) -> Bool {
+    for scalar in text.unicodeScalars {
+        switch scalar.value {
+        case 0x0590 ... 0x08FF, 0xFB1D ... 0xFDFF, 0xFE70 ... 0xFEFF:
+            return true
+        case 0x0041 ... 0x007A, 0x0061 ... 0x007A, 0x0030 ... 0x0039:
+            return false
+        default:
+            continue
+        }
+    }
+    return false
 }
 
 private func footerFont(size: CGFloat) -> CTFont {
