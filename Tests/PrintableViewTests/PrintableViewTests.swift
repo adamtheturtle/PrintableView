@@ -505,4 +505,21 @@ struct PrintableViewTests {
             try await task.value
         }
     }
+
+    @Test(arguments: [
+        (true, PrintPresentationResult.completed),
+        (false, PrintPresentationResult.cancelled)
+    ])
+    func `ios print completion maps completed and cancelled`(
+        completed: Bool,
+        expected: PrintPresentationResult
+    ) {
+        #expect(iosPrintPanelResult(completed: completed, error: nil) == expected)
+    }
+
+    @Test func `ios print completion maps errors to failures`() {
+        let error = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "offline"])
+        let result = iosPrintPanelResult(completed: false, error: error)
+        #expect(result == .failed("offline"))
+    }
 }
