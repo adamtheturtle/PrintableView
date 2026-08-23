@@ -7,6 +7,7 @@
     import AppKit
     import PDFKit
 #elseif os(iOS) || os(tvOS) || os(visionOS)
+    import PDFKit
     import UIKit
 #endif
 import CoreGraphics
@@ -508,11 +509,15 @@ public func printDocument(
                 _ = try presentationOutcome(for: result)
             } catch let error as PrintDocumentError {
                 onError(error)
+            } catch is CancellationError {
+                return
             } catch {
                 assertionFailure("print presentation threw an undocumented error: \(error)")
             }
         } catch let error as PrintDocumentError {
             onError(error)
+        } catch is CancellationError {
+            return
         } catch {
             assertionFailure("renderPDF threw an undocumented error: \(error)")
         }
