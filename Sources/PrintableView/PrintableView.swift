@@ -647,12 +647,13 @@ private let usLetter = CGSize(width: 612, height: 792)
     @MainActor
     private func livePrintPanelPresenter(
         pdfData: Data,
-        pageSize _: CGSize,
+        pageSize: CGSize,
         jobTitle: String
     ) async -> PrintPresentationResult {
         let info = UIPrintInfo(dictionary: nil)
         info.jobName = jobTitle
         info.outputType = .general
+        info.paperRect = CGRect(origin: .zero, size: pageSize)
         let controller = UIPrintInteractionController.shared
         controller.printInfo = info
         controller.printingItem = pdfData
