@@ -336,7 +336,8 @@ func renderPDFData(
                 drawFooter(
                     footer.formattedText(page: pageIndex + 1, pageCount: pageCount),
                     context: context,
-                    bounds: layout.footerBounds
+                    bounds: layout.footerBounds,
+                    colorScheme: configuration.colorScheme
                 )
             }
             context.endPDFPage()
@@ -650,14 +651,21 @@ func validatedLayout(
     )
 }
 
-private func drawFooter(_ text: String, context: CGContext, bounds: CGRect) {
+private func drawFooter(
+    _ text: String,
+    context: CGContext,
+    bounds: CGRect,
+    colorScheme: ColorScheme
+) {
     guard bounds.width > 0, bounds.height > 0 else { return }
     let fontSize = min(8, max(1, bounds.height - 4))
     let font = footerFont(size: fontSize)
+    // Light gray on light pages; near-white on dark pages for readable contrast (#50).
+    let gray: CGFloat = colorScheme == .dark ? 0.85 : 0.35
     let attributes: [NSAttributedString.Key: Any] = [
         NSAttributedString.Key(kCTFontAttributeName as String): font,
         NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-            CGColor(gray: 0.35, alpha: 1)
+            CGColor(gray: gray, alpha: 1)
     ]
     let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
     context.saveGState()
