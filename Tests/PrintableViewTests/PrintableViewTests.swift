@@ -236,6 +236,16 @@ struct PrintableViewTests {
         #expect(!text.contains("secret"))
     }
 
+    @Test func `attribution footer resolves relative URLs against their base`() {
+        let base = URL(string: "https://user:secret@example.com/docs/")!
+        let relative = URL(string: "guide.html", relativeTo: base)!
+        let source = sanitizedAttributionSource(relative)
+
+        #expect(source == "https://example.com/docs/guide.html")
+        #expect(!source.contains("user"))
+        #expect(!source.contains("secret"))
+    }
+
     @Test func `attribution footer redacts local file paths`() throws {
         let url = URL(fileURLWithPath: "/Users/private/Documents/notes.txt")
         let configuration = PrintConfiguration(
