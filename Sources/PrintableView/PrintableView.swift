@@ -425,6 +425,12 @@ func printDocument<Content: View>(
     @ViewBuilder content: () -> Content,
     presenter: PrintPanelPresenter
 ) async throws -> PrintPresentationOutcome {
+    let trimmedTitle = configuration.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty else {
+        throw PrintDocumentError.invalidResourceLimit("jobTitle must not be empty")
+    }
+    var configuration = configuration
+    configuration.jobTitle = trimmedTitle
     let data = try renderPDF(configuration: configuration, content: content)
     let result = await presenter(
         data,

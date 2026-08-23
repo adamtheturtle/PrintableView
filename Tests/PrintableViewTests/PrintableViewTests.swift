@@ -346,6 +346,16 @@ struct PrintableViewTests {
         #expect(task.isCancelled)
     }
 
+    @Test func `empty job titles are rejected`() async {
+        await #expect(throws: PrintDocumentError.invalidResourceLimit("jobTitle must not be empty")) {
+            try await printDocument(
+                configuration: PrintConfiguration(pageSize: letter, jobTitle: "   "),
+                content: { Text("Print me") },
+                presenter: { _, _, _ in .completed }
+            )
+        }
+    }
+
     @Test func `print presentation reports completion`() async throws {
         let outcome = try await printDocument(
             configuration: PrintConfiguration(pageSize: letter),
