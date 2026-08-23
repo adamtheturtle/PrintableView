@@ -868,7 +868,6 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
         let info = UIPrintInfo(dictionary: nil)
         info.jobName = jobTitle
         info.outputType = .general
-        info.paperRect = CGRect(origin: .zero, size: pageSize)
         let controller = UIPrintInteractionController.shared
         controller.printInfo = info
         controller.printingItem = pdfData
