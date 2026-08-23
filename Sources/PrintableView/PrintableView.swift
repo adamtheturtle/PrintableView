@@ -554,9 +554,9 @@ func validatedLayout(
 private func drawFooter(_ text: String, context: CGContext, bounds: CGRect) {
     guard bounds.width > 0, bounds.height > 0 else { return }
     let fontSize = min(8, max(1, bounds.height - 4))
+    let font = footerFont(size: fontSize)
     let attributes: [NSAttributedString.Key: Any] = [
-        NSAttributedString.Key(kCTFontAttributeName as String):
-            CTFontCreateWithName("Helvetica" as CFString, fontSize, nil),
+        NSAttributedString.Key(kCTFontAttributeName as String): font,
         NSAttributedString.Key(kCTForegroundColorAttributeName as String):
             CGColor(gray: 0.35, alpha: 1)
     ]
@@ -567,6 +567,15 @@ private func drawFooter(_ text: String, context: CGContext, bounds: CGRect) {
     context.textPosition = CGPoint(x: bounds.minX, y: bounds.minY + max(1, (bounds.height - fontSize) / 2))
     CTLineDraw(line, context)
     context.restoreGState()
+}
+
+private func footerFont(size: CGFloat) -> CTFont {
+    #if os(macOS)
+        let platformFont = NSFont.systemFont(ofSize: size)
+    #else
+        let platformFont = UIFont.systemFont(ofSize: size)
+    #endif
+    return CTFontCreateWithName(platformFont.fontName as CFString, size, nil)
 }
 
 @MainActor
