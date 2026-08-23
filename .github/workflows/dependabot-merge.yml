@@ -34,7 +34,6 @@ jobs:
                   ;;
                 *)
                   all_ok=false
-                  break
                   ;;
               esac
             done
