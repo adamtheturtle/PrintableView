@@ -764,8 +764,6 @@ private func resolvedCGColor(_ color: Color, colorScheme: ColorScheme) -> CGColo
     #elseif os(iOS) || os(tvOS) || os(visionOS)
         let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         return UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style)).cgColor
-    #else
-        return CGColor(gray: colorScheme == .dark ? 0 : 1, alpha: 1)
     #endif
 }
 

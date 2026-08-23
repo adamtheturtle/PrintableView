@@ -134,6 +134,33 @@ struct PrintableViewTests {
         #expect(sample.blue < 100)
     }
 
+    @Test func `adaptive background colors honor the configured color scheme`() throws {
+        let pageSize = CGSize(width: 40, height: 40)
+        let light = try renderPDF(
+            Text("X"),
+            configuration: PrintConfiguration(
+                pageSize: pageSize,
+                margins: EdgeInsets(top: 5, leading: 5, bottom: 5, trailing: 5),
+                colorScheme: .light,
+                background: Color.primary.opacity(0.1)
+            )
+        )
+        let dark = try renderPDF(
+            Text("X"),
+            configuration: PrintConfiguration(
+                pageSize: pageSize,
+                margins: EdgeInsets(top: 5, leading: 5, bottom: 5, trailing: 5),
+                colorScheme: .dark,
+                background: Color.primary.opacity(0.1)
+            )
+        )
+        let lightSample = try #require(pixel(light, page: 1, at: CGPoint(x: 20, y: 20)))
+        let darkSample = try #require(pixel(dark, page: 1, at: CGPoint(x: 20, y: 20)))
+
+        #expect(lightSample.red != darkSample.red || lightSample.green != darkSample.green
+            || lightSample.blue != darkSample.blue)
+    }
+
     @Test func `document background fills margin areas outside content bounds`() throws {
         let pageSize = CGSize(width: 100, height: 100)
         let configuration = PrintConfiguration(
