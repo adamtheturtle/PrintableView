@@ -3,10 +3,12 @@ name: Docs
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,5 +35,6 @@ jobs:
             --output-path docs
 
       - name: Add root redirect to the documentation landing page
+        if: github.event_name != 'pull_request'
         run: |
           printf '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=documentation/printableview/"></head></html>' > docs/index.html
