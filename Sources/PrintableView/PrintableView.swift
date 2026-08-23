@@ -150,7 +150,7 @@ public struct PrintFooter {
 
 /// Layout and presentation options for a printable SwiftUI document.
 public struct PrintConfiguration {
-    /// The paper size in points. Pass `nil` to use the platform default.
+    /// The paper size in points. Pass `nil` to use US Letter (612 × 792 pt).
     public var pageSize: CGSize?
     /// The inset from each paper edge, in points.
     public var margins: EdgeInsets
@@ -569,12 +569,10 @@ private func resolvedCGColor(_ color: Color, colorScheme: ColorScheme) -> CGColo
 
 @MainActor
 private func defaultPaperSize() -> CGSize {
-    #if os(macOS)
-        let size = NSPrintInfo.shared.paperSize
-        return size.width > 0 && size.height > 0 ? size : usLetter
-    #else
-        return usLetter
-    #endif
+    // Always US Letter so renders are deterministic across machines and locales
+    // when `pageSize` is omitted (#47). Pass an explicit `pageSize` for A4 or
+    // other stock.
+    usLetter
 }
 
 private let usLetter = CGSize(width: 612, height: 792)
