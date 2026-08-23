@@ -367,6 +367,18 @@ struct PrintableViewTests {
         }
     }
 
+    @Test func `zero-width rendered content is rejected`() {
+        #expect(throws: PrintDocumentError.invalidContentGeometry("width must be greater than zero")) {
+            try validatedPageCount(contentSize: CGSize(width: 0, height: 100), contentHeight: 100)
+        }
+    }
+
+    @Test func `zero-height rendered content is rejected`() {
+        #expect(throws: PrintDocumentError.invalidContentGeometry("height must be greater than zero")) {
+            try validatedPageCount(contentSize: CGSize(width: 100, height: 0), contentHeight: 100)
+        }
+    }
+
     @Test func `the rounded Int upper boundary is rejected before conversion`() {
         #expect(throws: PrintDocumentError.invalidContentGeometry(
             "height exceeds the supported page-count range"
