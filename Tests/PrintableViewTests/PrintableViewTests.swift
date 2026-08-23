@@ -128,6 +128,22 @@ struct PrintableViewTests {
         #expect(sample.blue < 100)
     }
 
+    @Test func `document background fills margin areas outside content bounds`() throws {
+        let pageSize = CGSize(width: 100, height: 100)
+        let configuration = PrintConfiguration(
+            pageSize: pageSize,
+            margins: EdgeInsets(top: 20, leading: 20, bottom: 20, trailing: 20),
+            background: .red
+        )
+        let data = try renderPDF(Text("Short"), configuration: configuration)
+        // Sample a point inside the top margin band (outside contentBounds).
+        let sample = try #require(pixel(data, page: 1, at: CGPoint(x: 50, y: 5)))
+
+        #expect(sample.red > 200)
+        #expect(sample.green < 100)
+        #expect(sample.blue < 100)
+    }
+
     @Test func `a renderer that emits no drawing callback is rejected`() throws {
         let configuration = PrintConfiguration(pageSize: letter)
         let layout = try validatedLayout(configuration: configuration, pageSize: letter)
