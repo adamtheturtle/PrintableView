@@ -474,9 +474,25 @@ public func printDocument(
     margins: CGFloat = 36
 ) async throws -> PrintPresentationOutcome {
     try await printDocument(
+        content,
+        jobTitle: jobTitle,
+        pageSize: pageSize,
+        margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins)
+    )
+}
+
+/// Renders `content`, presents the platform print UI, and reports its final outcome.
+@MainActor
+public func printDocument(
+    _ content: some View,
+    jobTitle: String,
+    pageSize: CGSize? = nil,
+    margins: EdgeInsets
+) async throws -> PrintPresentationOutcome {
+    try await printDocument(
         configuration: PrintConfiguration(
             pageSize: pageSize,
-            margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
+            margins: margins,
             jobTitle: jobTitle
         )
     ) {
@@ -497,9 +513,31 @@ public func printDocument(
     margins: CGFloat = 36,
     onError: @escaping @MainActor (PrintDocumentError) -> Void
 ) -> Task<Void, Never> {
-    let configuration = PrintConfiguration(
+    printDocument(
+        content,
+        jobTitle: jobTitle,
         pageSize: pageSize,
         margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
+        onError: onError
+    )
+}
+
+/// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
+///
+/// Returns a structured task the caller can retain or cancel. The task completes after
+/// presentation finishes or a render error is reported.
+@discardableResult
+@MainActor
+public func printDocument(
+    _ content: some View,
+    jobTitle: String,
+    pageSize: CGSize? = nil,
+    margins: EdgeInsets,
+    onError: @escaping @MainActor (PrintDocumentError) -> Void
+) -> Task<Void, Never> {
+    let configuration = PrintConfiguration(
+        pageSize: pageSize,
+        margins: margins,
         jobTitle: jobTitle
     )
     return Task { @MainActor in
