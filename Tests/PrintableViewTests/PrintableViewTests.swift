@@ -10,6 +10,7 @@
 
 import CoreGraphics
 import CoreText
+import Foundation
 import PDFKit
 import SwiftUI
 import Testing
@@ -581,5 +582,40 @@ struct PrintableViewTests {
         let error = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "offline"])
         let result = iosPrintPanelResult(completed: false, error: error)
         #expect(result == .failed("offline"))
+    }
+
+    @Test func `ios print timeout cleanup is skipped when sleep is cancelled`() async {
+        let flag = TimeoutFlag()
+        await runIOSPrintTimeout(
+            sleep: { throw CancellationError() },
+            onTimeout: { flag.set() }
+        )
+        #expect(!flag.value)
+    }
+
+    @Test func `ios print timeout cleanup runs when sleep completes`() async {
+        let flag = TimeoutFlag()
+        await runIOSPrintTimeout(
+            sleep: {},
+            onTimeout: { flag.set() }
+        )
+        #expect(flag.value)
+    }
+}
+
+private final class TimeoutFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private nonisolated(unsafe) var triggered = false
+
+    nonisolated var value: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return triggered
+    }
+
+    nonisolated func set() {
+        lock.lock()
+        triggered = true
+        lock.unlock()
     }
 }

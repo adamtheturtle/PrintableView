@@ -794,6 +794,22 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
     return true
 }
 
+/// Runs `sleep` and invokes `onTimeout` only when it completes without cancellation.
+@MainActor
+func runIOSPrintTimeout(
+    sleep: @escaping @Sendable () async throws -> Void,
+    onTimeout: @escaping @Sendable () -> Void
+) async {
+    do {
+        try await sleep()
+    } catch is CancellationError {
+        return
+    } catch {
+        return
+    }
+    onTimeout()
+}
+
 #if os(macOS)
     @MainActor
     private func livePrintPanelPresenter(
@@ -841,11 +857,15 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
         func install(_ continuation: CheckedContinuation<PrintPresentationResult, Never>) {
             self.continuation = continuation
             timeoutTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(600))
-                // Clear the shared controller so a timed-out sheet does not block
-                // later presents after the continuation has already failed.
-                UIPrintInteractionController.shared.dismiss(animated: false)
-                finish(with: .failed("The print UI did not report a result."))
+                await runIOSPrintTimeout(
+                    sleep: { try await Task.sleep(for: .seconds(600)) },
+                    onTimeout: {
+                        // Clear the shared controller so a timed-out sheet does not block
+                        // later presents after the continuation has already failed.
+                        UIPrintInteractionController.shared.dismiss(animated: false)
+                        finish(with: .failed("The print UI did not report a result."))
+                    }
+                )
             }
         }
 
