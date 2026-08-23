@@ -244,7 +244,6 @@ public func renderPDF(
     _ content: some View,
     configuration: PrintConfiguration = PrintConfiguration()
 ) throws -> Data {
-    try Task.checkCancellation()
     let pageSize = configuration.pageSize ?? defaultPaperSize()
     let layout = try validatedLayout(configuration: configuration, pageSize: pageSize)
 
