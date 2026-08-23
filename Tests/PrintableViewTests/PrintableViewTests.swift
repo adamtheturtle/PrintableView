@@ -492,4 +492,17 @@ struct PrintableViewTests {
         let configuration = PrintConfiguration(pageSize: letter, jobTitle: "Sendable")
         #expect({ (_: PrintConfiguration) in true }(configuration))
     }
+
+    @Test func `rendering honours task cancellation`() async {
+        let task = Task { @MainActor in
+            try renderPDF(
+                Color.black.frame(height: 10_000),
+                configuration: PrintConfiguration(pageSize: letter, maximumPageCount: 500)
+            )
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
+    }
 }
