@@ -631,14 +631,21 @@ private let usLetter = CGSize(width: 612, height: 792)
     private final class PrintCompletionGate {
         private var continuation: CheckedContinuation<PrintPresentationResult, Never>?
         private var finished = false
+        private var timeoutTask: Task<Void, Never>?
 
         func install(_ continuation: CheckedContinuation<PrintPresentationResult, Never>) {
             self.continuation = continuation
+            timeoutTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(600))
+                finish(with: .failed("The print UI did not report a result."))
+            }
         }
 
         func finish(with result: PrintPresentationResult) {
             guard !finished else { return }
             finished = true
+            timeoutTask?.cancel()
+            timeoutTask = nil
             continuation?.resume(returning: result)
             continuation = nil
         }
