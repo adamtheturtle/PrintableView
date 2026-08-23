@@ -583,11 +583,7 @@ public func printDocument(
         margins: margins,
         jobTitle: jobTitle
     )
-    do {
-        try Task.checkCancellation()
-    } catch is CancellationError {
-        return Task {}
-    }
+    guard !Task.isCancelled else { return Task {} }
     let data: Data
     do {
         data = try renderPDF(content, configuration: configuration)
