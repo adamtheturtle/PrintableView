@@ -24,7 +24,7 @@ jobs:
             all_ok=true
             for name in "${required[@]}"; do
               conclusion=$(printf '%s' "$json" | jq -r --arg n "$name" '
-                [.statusCheckRollup[] | select(.name == $n) | .conclusion] | first // empty
+                [(.statusCheckRollup // [])[] | select(.name == $n) | .conclusion] | first // empty
               ')
               if [[ "$conclusion" != "SUCCESS" ]]; then
                 all_ok=false
