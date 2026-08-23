@@ -830,6 +830,9 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
             self.continuation = continuation
             timeoutTask = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(600))
+                // Clear the shared controller so a timed-out sheet does not block
+                // later presents after the continuation has already failed.
+                UIPrintInteractionController.shared.dismiss(animated: false)
                 finish(with: .failed("The print UI did not report a result."))
             }
         }
