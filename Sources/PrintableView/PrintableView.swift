@@ -172,7 +172,7 @@ func sanitizedAttributionSource(_ url: URL) -> String {
         return name.isEmpty ? "file" : name
     }
 
-    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: true) else {
         return url.absoluteString
     }
     components.user = nil
