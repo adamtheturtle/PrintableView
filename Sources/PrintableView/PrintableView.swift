@@ -7,6 +7,7 @@
     import AppKit
     import PDFKit
 #elseif os(iOS) || os(tvOS) || os(visionOS)
+    import PDFKit
     import UIKit
 #endif
 import CoreGraphics
@@ -425,6 +426,12 @@ func printDocument<Content: View>(
     @ViewBuilder content: () -> Content,
     presenter: PrintPanelPresenter
 ) async throws -> PrintPresentationOutcome {
+    let trimmedTitle = configuration.jobTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedTitle.isEmpty else {
+        throw PrintDocumentError.invalidResourceLimit("jobTitle must not be empty")
+    }
+    var configuration = configuration
+    configuration.jobTitle = trimmedTitle
     let data = try renderPDF(configuration: configuration, content: content)
     let result = await presenter(
         data,
@@ -502,11 +509,15 @@ public func printDocument(
                 _ = try presentationOutcome(for: result)
             } catch let error as PrintDocumentError {
                 onError(error)
+            } catch is CancellationError {
+                return
             } catch {
                 assertionFailure("print presentation threw an undocumented error: \(error)")
             }
         } catch let error as PrintDocumentError {
             onError(error)
+        } catch is CancellationError {
+            return
         } catch {
             assertionFailure("renderPDF threw an undocumented error: \(error)")
         }
