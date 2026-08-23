@@ -76,25 +76,23 @@ struct PrintableViewTests {
         return (pixels[offset], pixels[offset + 1], pixels[offset + 2])
     }
 
-    @Test func `short content produces a single page`() {
-        let data = makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
-        #expect(data != nil)
-        #expect(pageCount(data!) == 1)
+    @Test func `short content produces a single page`() throws {
+        let data = try makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
+        #expect(pageCount(data) == 1)
     }
 
-    @Test func `content sizes the page to the requested paper`() {
-        let data = makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
-        let size = mediaBoxSize(data!, page: 1)
+    @Test func `content sizes the page to the requested paper`() throws {
+        let data = try makeDocumentPDFData(Text("Hello, paper."), pageSize: letter, margins: margins)
+        let size = mediaBoxSize(data, page: 1)
         #expect(size?.width == letter.width)
         #expect(size?.height == letter.height)
     }
 
-    @Test func `tall content is split across multiple pages`() {
+    @Test func `tall content is split across multiple pages`() throws {
         // Printable height is 792 - 72 = 720pt. A fixed 2000pt-tall view must span 3 pages.
         let tall = Color.black.frame(height: 2000)
-        let data = makeDocumentPDFData(tall, pageSize: letter, margins: margins)
-        #expect(data != nil)
-        #expect(pageCount(data!) == 3)
+        let data = try makeDocumentPDFData(tall, pageSize: letter, margins: margins)
+        #expect(pageCount(data) == 3)
     }
 
     @Test func `public renderer creates one page`() throws {
@@ -429,12 +427,12 @@ struct PrintableViewTests {
         }
     }
 
-    @Test func `larger margins yield more pages for the same content`() {
+    @Test func `larger margins yield more pages for the same content`() throws {
         let tall = Color.black.frame(height: 2000)
-        let thin = makeDocumentPDFData(tall, pageSize: letter, margins: 36)
-        let thick = makeDocumentPDFData(tall, pageSize: letter, margins: 144)
+        let thin = try makeDocumentPDFData(tall, pageSize: letter, margins: 36)
+        let thick = try makeDocumentPDFData(tall, pageSize: letter, margins: 144)
         // Bigger margins shrink the printable band, so the same content needs more pages.
-        #expect(pageCount(thick!)! > pageCount(thin!)!)
+        #expect(pageCount(thick)! > pageCount(thin)!)
     }
 
     @Test func `print section renders to a non-empty raster`() {

@@ -515,8 +515,8 @@ func makeDocumentPDFData(
     _ content: some View,
     pageSize: CGSize,
     margins: CGFloat
-) -> Data? {
-    try? renderPDF(
+) throws -> Data {
+    try renderPDF(
         content,
         configuration: PrintConfiguration(
             pageSize: pageSize,
