@@ -201,6 +201,33 @@ struct PrintableViewTests {
         #expect(text?.contains("Page 1 of 1") == true)
     }
 
+    @Test func `attribution footer omits URL credentials`() throws {
+        let url = URL(string: "https://user:secret@example.com/path")!
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: .attribution(sourceURL: url)
+        )
+        let data = try renderPDF(Text("Document"), configuration: configuration)
+        let text = try #require(pageText(data, page: 1))
+
+        #expect(text.contains("https://example.com/path"))
+        #expect(!text.contains("user"))
+        #expect(!text.contains("secret"))
+    }
+
+    @Test func `attribution footer redacts local file paths`() throws {
+        let url = URL(fileURLWithPath: "/Users/private/Documents/notes.txt")
+        let configuration = PrintConfiguration(
+            pageSize: letter,
+            footer: .attribution(sourceURL: url)
+        )
+        let data = try renderPDF(Text("Document"), configuration: configuration)
+        let text = try #require(pageText(data, page: 1))
+
+        #expect(text.contains("notes.txt"))
+        #expect(!text.contains("/Users/private"))
+    }
+
     @Test func `long footer remains bounded to its page`() throws {
         let longSource = "https://example.com/" + String(repeating: "very-long-segment/", count: 200)
         let configuration = PrintConfiguration(

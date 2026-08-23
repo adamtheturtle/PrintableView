@@ -116,9 +116,12 @@ public struct PrintFooter {
         }
     }
 
-    /// Creates a source-attribution footer from a URL's absolute string.
+    /// Creates a source-attribution footer from a URL.
+    ///
+    /// Credentials embedded in the URL are omitted. `file://` URLs contribute only the
+    /// last path component so full local filesystem paths are not printed.
     public static func attribution(sourceURL: URL, height: CGFloat = 18) -> PrintFooter {
-        attribution(source: sourceURL.absoluteString, height: height)
+        attribution(source: sanitizedAttributionSource(sourceURL), height: height)
     }
 
     func formattedText(page: Int, pageCount: Int) -> String {
@@ -146,6 +149,21 @@ public struct PrintFooter {
         }
         return result
     }
+}
+
+/// Returns a footer-safe display string for `url`, without credentials or full file paths.
+func sanitizedAttributionSource(_ url: URL) -> String {
+    if url.isFileURL {
+        let name = url.lastPathComponent
+        return name.isEmpty ? "file" : name
+    }
+
+    guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+        return url.absoluteString
+    }
+    components.user = nil
+    components.password = nil
+    return components.string ?? url.absoluteString
 }
 
 /// Layout and presentation options for a printable SwiftUI document.
