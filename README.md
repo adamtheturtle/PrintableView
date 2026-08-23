@@ -50,6 +50,9 @@ let pdfData = try renderPDF(configuration: configuration) {
 }
 ```
 
+When `pageSize` is omitted, rendering uses US Letter (612 × 792 pt). Pass an explicit size
+such as A4 (`CGSize(width: 595.28, height: 841.89)`) when you need a different stock.
+
 Invalid page sizes, margins, and footer heights throw `PrintDocumentError` rather than
 silently producing an empty document.
 
