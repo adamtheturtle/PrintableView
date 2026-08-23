@@ -297,16 +297,28 @@ struct PrintableViewTests {
         }
     }
 
-    @Test func `convenience printing reports render failures`() {
+    @Test func `convenience printing reports render failures`() async {
         var reported: PrintDocumentError?
-        printDocument(
+        let task = printDocument(
             Text("Invalid"),
             jobTitle: "Invalid",
             pageSize: CGSize(width: CGFloat.nan, height: 100),
             onError: { reported = $0 }
         )
+        await task.value
 
         #expect(reported == .invalidPageGeometry("all dimensions must be finite"))
+    }
+
+    @Test func `callback printing returns a structured task`() {
+        let task = printDocument(
+            Text("Never presented"),
+            jobTitle: "Task",
+            pageSize: CGSize(width: CGFloat.nan, height: 100),
+            onError: { _ in }
+        )
+        task.cancel()
+        #expect(task.isCancelled)
     }
 
     @Test func `print presentation reports completion`() async throws {

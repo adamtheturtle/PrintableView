@@ -437,22 +437,26 @@ public func printDocument(
 }
 
 /// Renders `content`, presents the platform print panel, and reports rendering or presentation failures.
+///
+/// Returns a structured task the caller can retain or cancel. The task completes after
+/// presentation finishes or a render error is reported.
+@discardableResult
 @MainActor
 public func printDocument(
     _ content: some View,
     jobTitle: String,
     pageSize: CGSize? = nil,
     margins: CGFloat = 36,
-    onError: @escaping (PrintDocumentError) -> Void
-) {
+    onError: @escaping @MainActor (PrintDocumentError) -> Void
+) -> Task<Void, Never> {
     let configuration = PrintConfiguration(
         pageSize: pageSize,
         margins: EdgeInsets(top: margins, leading: margins, bottom: margins, trailing: margins),
         jobTitle: jobTitle
     )
-    do {
-        let data = try renderPDF(content, configuration: configuration)
-        Task { @MainActor in
+    return Task { @MainActor in
+        do {
+            let data = try renderPDF(content, configuration: configuration)
             let result = await livePrintPanelPresenter(
                 pdfData: data,
                 pageSize: pageSize ?? defaultPaperSize(),
@@ -465,11 +469,11 @@ public func printDocument(
             } catch {
                 assertionFailure("print presentation threw an undocumented error: \(error)")
             }
+        } catch let error as PrintDocumentError {
+            onError(error)
+        } catch {
+            assertionFailure("renderPDF threw an undocumented error: \(error)")
         }
-    } catch let error as PrintDocumentError {
-        onError(error)
-    } catch {
-        assertionFailure("renderPDF threw an undocumented error: \(error)")
     }
 }
 
