@@ -291,6 +291,8 @@ func renderPDFData(
             }
             context.endPDFPage()
             emittedPageCount += 1
+            // Fail fast while encoding; final size is re-checked after `closePDF`
+            // because the trailer can still grow the byte count (#65).
             if pdfData.length > configuration.maximumPDFBytes {
                 renderingError = .pdfSizeLimitExceeded(maximumBytes: configuration.maximumPDFBytes)
                 break
@@ -298,11 +300,13 @@ func renderPDFData(
         }
     }
     context.closePDF()
-    if let renderingError {
-        throw renderingError
-    }
+    // Prefer the post-finalization size check so trailer growth cannot slip past
+    // the mid-encode snapshots above.
     guard pdfData.length <= configuration.maximumPDFBytes else {
         throw PrintDocumentError.pdfSizeLimitExceeded(maximumBytes: configuration.maximumPDFBytes)
+    }
+    if let renderingError {
+        throw renderingError
     }
     guard emittedPageCount > 0 else {
         throw PrintDocumentError.renderProducedNoPages
