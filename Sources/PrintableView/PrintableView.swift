@@ -837,6 +837,74 @@ actor PrintPresentationCoordinator {
 
 #if os(macOS)
     @MainActor
+    private final class MacOSPrintPanelSheetDelegate: NSObject {
+        private var continuation: CheckedContinuation<NSApplication.ModalResponse, Never>?
+
+        func present(
+            panel: NSPrintPanel,
+            printInfo: NSPrintInfo,
+            modalFor window: NSWindow
+        ) async -> NSApplication.ModalResponse {
+            await withCheckedContinuation { continuation in
+                self.continuation = continuation
+                panel.beginSheet(
+                    with: printInfo,
+                    modalFor: window,
+                    delegate: self,
+                    didEnd: #selector(sheetDidEnd(_:returnCode:contextInfo:)),
+                    contextInfo: nil
+                )
+            }
+        }
+
+        @objc private func sheetDidEnd(
+            _ panel: NSPrintPanel,
+            returnCode: NSApplication.ModalResponse,
+            contextInfo: UnsafeMutableRawPointer?
+        ) {
+            continuation?.resume(returning: returnCode)
+            continuation = nil
+        }
+    }
+
+    @MainActor
+    private func macOSPrintPanelResponse(
+        operation: NSPrintOperation,
+        printInfo: NSPrintInfo
+    ) async -> PrintPresentationResult {
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+            let delegate = MacOSPrintPanelSheetDelegate()
+            let response = await delegate.present(
+                panel: operation.printPanel,
+                printInfo: printInfo,
+                modalFor: window
+            )
+            switch response {
+            case .OK:
+                break
+            case .cancel:
+                return .cancelled
+            default:
+                return .presentationRejected
+            }
+        } else {
+            switch operation.printPanel.runModal(with: printInfo) {
+            case NSApplication.ModalResponse.OK.rawValue:
+                break
+            case NSApplication.ModalResponse.cancel.rawValue:
+                return .cancelled
+            default:
+                return .presentationRejected
+            }
+        }
+        operation.showsPrintPanel = false
+        if operation.run() {
+            return .completed
+        }
+        return .failed("The print operation did not complete successfully.")
+    }
+
+    @MainActor
     private func livePrintPanelPresenter(
         pdfData: Data,
         pageSize: CGSize,
@@ -858,19 +926,7 @@ actor PrintPresentationCoordinator {
             return .operationUnavailable
         }
         operation.jobTitle = jobTitle
-        switch operation.printPanel.runModal(with: info) {
-        case NSApplication.ModalResponse.OK.rawValue:
-            break
-        case NSApplication.ModalResponse.cancel.rawValue:
-            return .cancelled
-        default:
-            return .presentationRejected
-        }
-        operation.showsPrintPanel = false
-        if operation.run() {
-            return .completed
-        }
-        return .failed("The print operation did not complete successfully.")
+        return await macOSPrintPanelResponse(operation: operation, printInfo: info)
     }
 #elseif os(iOS)
     private actor IOSPrintPresentationCoordinator {
