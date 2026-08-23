@@ -480,6 +480,14 @@ private func presentationOutcome(
     }
 }
 
+/// Maps UIKit print completion values to a presentation result for testing and production.
+func iosPrintPanelResult(completed: Bool, error: Error?) -> PrintPresentationResult {
+    if let error {
+        return .failed(error.localizedDescription)
+    }
+    return completed ? .completed : .cancelled
+}
+
 /// Renders `content`, presents the platform print UI, and reports its final outcome.
 @MainActor
 public func printDocument(
@@ -847,12 +855,7 @@ func validatedRenderedPDF(_ document: PDFDocument, expectedPageSize: CGSize) -> 
         return await withCheckedContinuation { continuation in
             gate.install(continuation)
             let didPresent = controller.present(animated: true) { _, completed, error in
-                let result: PrintPresentationResult
-                if let error {
-                    result = .failed(error.localizedDescription)
-                } else {
-                    result = completed ? .completed : .cancelled
-                }
+                let result = iosPrintPanelResult(completed: completed, error: error)
                 Task { @MainActor in
                     gate.finish(with: result)
                 }
