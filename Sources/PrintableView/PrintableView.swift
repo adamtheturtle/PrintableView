@@ -583,41 +583,37 @@ public func printDocument(
         margins: margins,
         jobTitle: jobTitle
     )
-    guard !Task.isCancelled else { return Task {} }
+    guard !Task.isCancelled else { return Task<Void, Never> {} }
     let data: Data
     do {
         data = try renderPDF(content, configuration: configuration)
     } catch let error as PrintDocumentError {
         onError(error)
-        return Task {}
+        return Task<Void, Never> {}
     } catch is CancellationError {
-        return Task {}
+        return Task<Void, Never> {}
     } catch {
         onError(.unexpected("renderPDF threw an undocumented error: \(error)"))
-        return Task {}
+        return Task<Void, Never> {}
     }
 
     let resolvedPageSize = pageSize ?? defaultPaperSize()
     return Task { @MainActor in
+        guard !Task.isCancelled else { return }
+        let result = await livePrintPanelPresenter(
+            pdfData: data,
+            pageSize: resolvedPageSize,
+            jobTitle: jobTitle
+        )
         do {
-            try Task.checkCancellation()
-            let result = await livePrintPanelPresenter(
-                pdfData: data,
-                pageSize: resolvedPageSize,
-                jobTitle: jobTitle
-            )
-            do {
-                let outcome = try presentationOutcome(for: result)
-                onComplete?(outcome)
-            } catch let error as PrintDocumentError {
-                onError(error)
-            } catch is CancellationError {
-                return
-            } catch {
-                onError(.unexpected("print presentation threw an undocumented error: \(error)"))
-            }
+            let outcome = try presentationOutcome(for: result)
+            onComplete?(outcome)
+        } catch let error as PrintDocumentError {
+            onError(error)
         } catch is CancellationError {
             return
+        } catch {
+            onError(.unexpected("print presentation threw an undocumented error: \(error)"))
         }
     }
 }
