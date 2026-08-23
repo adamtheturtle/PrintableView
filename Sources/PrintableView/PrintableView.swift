@@ -325,6 +325,7 @@ func renderPDFData(
             return
         }
         for pageIndex in 0 ..< pageCount {
+            if Task.isCancelled { return }
             context.beginPDFPage(nil)
 
             // Fill the full media box so margins share the configured background
@@ -359,6 +360,9 @@ func renderPDFData(
                 break
             }
         }
+    }
+    if Task.isCancelled {
+        throw CancellationError()
     }
     context.closePDF()
     // Prefer the post-finalization size check so trailer growth cannot slip past
