@@ -6,7 +6,9 @@ let package = Package(
     name: "PrintableView",
     platforms: [
         .macOS(.v13),
-        .iOS(.v16)
+        .iOS(.v16),
+        .tvOS(.v16),
+        .visionOS(.v1)
     ],
     products: [
         .library(name: "PrintableView", targets: ["PrintableView"])
