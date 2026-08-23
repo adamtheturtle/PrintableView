@@ -525,8 +525,10 @@ public func printDocument(
 
 /// Renders `content`, presents the platform print panel, and reports outcome or failure.
 ///
-/// Returns a structured task the caller can retain or cancel. The task completes after
-/// presentation finishes or a render error is reported.
+/// Returns a structured task the caller can retain or cancel. Rendering runs before this
+/// function returns so MainActor state updates in the same turn cannot change the document.
+/// The returned task covers print presentation; cancel it to abandon presentation after
+/// render has already completed.
 ///
 /// - Parameters:
 ///   - onComplete: Invoked when printing completes or the user cancels.
@@ -553,8 +555,10 @@ public func printDocument(
 
 /// Renders `content`, presents the platform print panel, and reports outcome or failure.
 ///
-/// Returns a structured task the caller can retain or cancel. The task completes after
-/// presentation finishes or a render error is reported.
+/// Returns a structured task the caller can retain or cancel. Rendering runs before this
+/// function returns so MainActor state updates in the same turn cannot change the document.
+/// The returned task covers print presentation; cancel it to abandon presentation after
+/// render has already completed.
 ///
 /// - Parameters:
 ///   - onComplete: Invoked when printing completes or the user cancels.
@@ -574,30 +578,35 @@ public func printDocument(
         margins: margins,
         jobTitle: jobTitle
     )
+    let data: Data
+    do {
+        data = try renderPDF(content, configuration: configuration)
+    } catch let error as PrintDocumentError {
+        onError(error)
+        return Task {}
+    } catch is CancellationError {
+        return Task {}
+    } catch {
+        onError(.unexpected("renderPDF threw an undocumented error: \(error)"))
+        return Task {}
+    }
+
+    let resolvedPageSize = pageSize ?? defaultPaperSize()
     return Task { @MainActor in
+        let result = await livePrintPanelPresenter(
+            pdfData: data,
+            pageSize: resolvedPageSize,
+            jobTitle: jobTitle
+        )
         do {
-            let data = try renderPDF(content, configuration: configuration)
-            let result = await livePrintPanelPresenter(
-                pdfData: data,
-                pageSize: pageSize ?? defaultPaperSize(),
-                jobTitle: jobTitle
-            )
-            do {
-                let outcome = try presentationOutcome(for: result)
-                onComplete?(outcome)
-            } catch let error as PrintDocumentError {
-                onError(error)
-            } catch is CancellationError {
-                return
-            } catch {
-                onError(.unexpected("print presentation threw an undocumented error: \(error)"))
-            }
+            let outcome = try presentationOutcome(for: result)
+            onComplete?(outcome)
         } catch let error as PrintDocumentError {
             onError(error)
         } catch is CancellationError {
             return
         } catch {
-            onError(.unexpected("renderPDF threw an undocumented error: \(error)"))
+            onError(.unexpected("print presentation threw an undocumented error: \(error)"))
         }
     }
 }
