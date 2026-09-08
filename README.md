@@ -2,8 +2,7 @@
 
 Print a SwiftUI view to paper or Save-as-PDF on macOS and iPadOS.
 
-[Documentation](https://swiftpackageindex.com/adamtheturtle/PrintableView/documentation/printableview) |
-[Swift Package Index](https://swiftpackageindex.com/adamtheturtle/PrintableView)
+[Documentation](https://swiftpackageindex.com/adamtheturtle/PrintableView/documentation/printableview) | [Swift Package Index](https://swiftpackageindex.com/adamtheturtle/PrintableView)
 
 ## Installation
 
@@ -15,8 +14,7 @@ Add the `PrintableView` product to your target dependencies.
 
 ## Product
 
-- `PrintableView`: Render SwiftUI content to a paginated vector PDF and present the
-  platform print panel.
+- `PrintableView`: Render SwiftUI content to a paginated vector PDF and present the platform print panel.
 
 ## Basic printing
 
@@ -31,13 +29,12 @@ let outcome = try await printDocument(
 )
 ```
 
-The throwing API reports whether printing completed or the user cancelled. It throws a
-`PrintDocumentError` if PDF handoff, print-panel presentation, or printing fails.
+The throwing API reports whether printing completed or the user cancelled.
+It throws a `PrintDocumentError` if PDF handoff, print-panel presentation, or printing fails.
 
 ## Rendering PDF data
 
-PDF generation is separate from print-panel presentation, so it can be saved, shared, or
-tested without displaying UI:
+PDF generation is separate from print-panel presentation, so it can be saved, shared, or tested without displaying UI:
 
 ```swift
 let configuration = PrintConfiguration(
@@ -50,11 +47,10 @@ let pdfData = try renderPDF(configuration: configuration) {
 }
 ```
 
-When `pageSize` is omitted, rendering uses US Letter (612 × 792 pt). Pass an explicit size
-such as A4 (`CGSize(width: 595.28, height: 841.89)`) when you need a different stock.
+When `pageSize` is omitted, rendering uses US Letter (612 × 792 pt).
+Pass an explicit size such as A4 (`CGSize(width: 595.28, height: 841.89)`) when you need a different stock.
 
-Invalid page sizes, margins, and footer heights throw `PrintDocumentError` rather than
-silently producing an empty document.
+Invalid page sizes, margins, and footer heights throw `PrintDocumentError` rather than silently producing an empty document.
 
 ## Adding a source-attribution footer
 
@@ -69,9 +65,9 @@ let outcome = try await printDocument(configuration: configuration) {
 }
 ```
 
-The convenience footer draws `https://example.com/resource • Page 2 of 5`. For other text,
-use `PrintFooter { page, pageCount in ... }`. Footer output is constrained and clipped to a
-single bounded area on every page.
+The convenience footer draws `https://example.com/resource • Page 2 of 5`.
+For other text, use `PrintFooter { page, pageCount in ... }`.
+Footer output is constrained and clipped to a single bounded area on every page.
 
 ## Requirements
 
@@ -80,4 +76,5 @@ single bounded area on every page.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT.
+See [LICENSE](LICENSE).
