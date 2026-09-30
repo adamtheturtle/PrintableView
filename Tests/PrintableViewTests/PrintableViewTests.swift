@@ -592,6 +592,25 @@ struct PrintableViewTests {
         #expect(pages.flatMap(\.self) == lines)
     }
 
+    @Test func `short code leaves room for surrounding sections on one page`() throws {
+        let data = try renderPDF(
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Question")
+                PrintSection(title: "Starter Code") {
+                    PrintCode(code: "let queue = [1, 2, 3]")
+                }
+                PrintSection(title: "Solution") {
+                    PrintCode(code: "queue.first")
+                }
+            },
+            configuration: PrintConfiguration(pageSize: letter)
+        )
+        #expect(pageCount(data) == 1)
+        let text = try #require(pageText(data, page: 1))
+        #expect(text.contains("let queue"))
+        #expect(text.contains("queue.first"))
+    }
+
     @Test func `print code paginates on line boundaries in PDF output`() throws {
         let lines = (1 ... 40).map { "Line \($0)" }
         let configuration = PrintConfiguration(

@@ -1110,7 +1110,7 @@ public struct PrintCode: View {
                             .frame(height: lineHeight, alignment: .topLeading)
                     }
                 }
-                .frame(height: bandHeight, alignment: .topLeading)
+                .frame(height: min(bandHeight, CGFloat(pageLines.count) * lineHeight), alignment: .topLeading)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
