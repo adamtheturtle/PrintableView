@@ -67,7 +67,7 @@ let outcome = try await printDocument(configuration: configuration) {
 
 The convenience footer draws `https://example.com/resource • Page 2 of 5`.
 For other text, use `PrintFooter { page, pageCount in ... }`.
-Footer output is constrained and clipped to a single bounded area on every page.
+Footer output is constrained and clipped to one bounded area on every page.
 
 ## Requirements
 
